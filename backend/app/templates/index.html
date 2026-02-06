@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Meeting AI (Project-based)</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>Meeting AI</h1>
+        <p class="subtitle">Project-based meeting recording, context retention, and actionable intelligence</p>
+      </header>
+
+      <section class="card">
+        <h2>1) Project</h2>
+        <div class="row">
+          <label>
+            Select existing:
+            <select id="projectSelect"></select>
+          </label>
+          <button id="refreshProjectsBtn">Refresh</button>
+        </div>
+
+        <div class="divider"></div>
+
+        <h3>Create new project</h3>
+        <div class="row">
+          <input id="projectName" placeholder="Project name" />
+          <input id="projectDesc" placeholder="Description (optional)" />
+          <button id="createProjectBtn">Create</button>
+        </div>
+        <div id="projectStatus" class="status"></div>
+      </section>
+
+      <section class="card">
+        <h2>2) Meeting recording (laptop mic)</h2>
+        <div class="row">
+          <input id="meetingTitle" placeholder="Meeting title (optional)" />
+        </div>
+        <div class="row">
+          <button id="startBtn" class="primary">Start Recording</button>
+          <button id="stopBtn" class="danger" disabled>Stop</button>
+        </div>
+        <div class="row small">
+          <span><b>Status:</b> <span id="recStatus">idle</span></span>
+          <span><b>Meeting ID:</b> <span id="meetingId">—</span></span>
+        </div>
+        <audio id="playback" controls class="audio" hidden></audio>
+        <div id="meetingStatus" class="status"></div>
+      </section>
+
+      <section class="card">
+        <h2>3) Output (minutes + pending action items)</h2>
+        <div class="row">
+          <button id="loadHistoryBtn">Load Project History</button>
+          <label class="row small" style="margin-left: 8px">
+            <input type="checkbox" id="showCompletedToggle" />
+            Show completed action items
+          </label>
+        </div>
+        <div class="grid">
+          <div>
+            <h3>Pending action items (carry-forward)</h3>
+            <div id="pendingItemsList" class="list"></div>
+
+            <div class="divider"></div>
+            <h3>Add action item manually (demo/correction)</h3>
+            <div class="row">
+              <input id="aiWho" placeholder="Who (optional)" />
+              <input id="aiWillDo" placeholder="Will do (optional, e.g., 'prepare')" />
+            </div>
+            <div class="row">
+              <input id="aiWhat" placeholder="What (required)" style="min-width: 360px" />
+              <input id="aiByWhen" placeholder="By when (YYYY-MM-DD, optional)" />
+              <button id="addAiBtn" class="primary">Add</button>
+            </div>
+            <div id="aiStatus" class="status"></div>
+
+            <div class="divider"></div>
+            <h3>Completed action items</h3>
+            <div id="completedItemsList" class="list"></div>
+          </div>
+          <div>
+            <h3>Latest processed meeting</h3>
+            <div id="latestMinutes" class="pre"></div>
+          </div>
+        </div>
+      </section>
+
+      <footer>
+        <p class="muted">
+          Phase 2 prototype UI (no React build). Next phases: Whisper ASR + Transformers summarization + improved extraction.
+        </p>
+      </footer>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
+

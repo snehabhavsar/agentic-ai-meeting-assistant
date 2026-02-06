@@ -1,0 +1,13 @@
+# Optional ML dependencies (install ONLY if you want local ASR + summarization)
+#
+# Whisper (local ASR)
+openai-whisper==20231117
+torch==2.2.2
+
+# Transformers summarization
+transformers==4.38.2
+sentencepiece==0.2.0
+
+# Optional NLP utilities (for better extraction)
+spacy==3.7.4
+
