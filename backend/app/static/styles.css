@@ -1,12 +1,19 @@
 :root {
-  --bg: #0b1220;
-  --card: #111a2e;
-  --text: #e7ecf5;
-  --muted: #a7b2c7;
-  --border: #213155;
-  --primary: #5aa7ff;
-  --danger: #ff5a7a;
-  --ok: #3ddc97;
+  /* Soft light theme (not too bright) */
+  --bg0: #f5f7fb;
+  --bg1: #eef2ff;
+  --card: #ffffff;
+  --text: #0f172a;
+  --muted: #475569;
+  --border: #e2e8f0;
+  --shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+
+  --primary: #2563eb;
+  --primary-soft: rgba(37, 99, 235, 0.10);
+  --danger: #dc2626;
+  --danger-soft: rgba(220, 38, 38, 0.10);
+  --ok: #16a34a;
+  --ok-soft: rgba(22, 163, 74, 0.12);
 }
 
 * {
@@ -17,33 +24,171 @@ body {
   margin: 0;
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji",
     "Segoe UI Emoji";
-  background: radial-gradient(1200px 600px at 20% 0%, #15244a 0%, var(--bg) 50%);
   color: var(--text);
+  background:
+    radial-gradient(900px 450px at 10% -10%, var(--bg1) 0%, rgba(238, 242, 255, 0) 55%),
+    radial-gradient(900px 450px at 90% 0%, rgba(203, 213, 225, 0.45) 0%, rgba(203, 213, 225, 0) 55%),
+    var(--bg0);
 }
 
-.container {
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 28px 18px 60px;
+.app {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  min-height: 100vh;
 }
 
-header h1 {
+.sidebar {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  padding: 18px 14px;
+  border-right: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(10px);
+}
+
+.brand {
+  padding: 10px 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.05);
+}
+
+.brand-title {
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+
+.brand-sub {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.nav {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0 10px;
+}
+
+.nav-btn {
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 12px;
+}
+
+.nav-btn.active {
+  border-color: rgba(37, 99, 235, 0.35);
+  background: var(--primary-soft);
+}
+
+.sidebar-section {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.05);
+}
+
+.sidebar-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.sidebar-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.project-tree {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+  max-height: 52vh;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.project-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  border-radius: 12px;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.project-node.active {
+  border-color: rgba(37, 99, 235, 0.35);
+  background: rgba(37, 99, 235, 0.06);
+}
+
+.project-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: rgba(37, 99, 235, 0.10);
+  color: #1d4ed8;
+  font-weight: 800;
+  font-size: 12px;
+}
+
+.project-meta {
+  display: grid;
+}
+
+.project-name {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.project-id {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.sidebar-hint {
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+.sidebar-footer {
+  margin-top: 14px;
+  font-size: 12px;
+  padding: 0 2px;
+}
+
+.main {
+  padding: 26px 22px 60px;
+  max-width: 1160px;
+}
+
+.page-header h1 {
   margin: 0 0 6px;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.2px;
 }
 
 .subtitle {
-  margin: 0 0 22px;
+  margin: 0 0 18px;
   color: var(--muted);
 }
 
 .card {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+  background: var(--card);
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 18px 18px 14px;
   margin: 16px 0;
-  backdrop-filter: blur(6px);
+  box-shadow: var(--shadow);
 }
 
 h2 {
@@ -66,6 +211,10 @@ h3 {
   margin: 8px 0;
 }
 
+.row.between {
+  justify-content: space-between;
+}
+
 .row.small {
   font-size: 13px;
   color: var(--muted);
@@ -79,8 +228,8 @@ label {
 
 input,
 select {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #f8fafc;
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 10px 10px;
   color: var(--text);
@@ -88,33 +237,57 @@ select {
   min-width: 220px;
 }
 
+.grow {
+  flex: 1;
+  min-width: 260px;
+}
+
+input:focus,
+select:focus {
+  border-color: rgba(37, 99, 235, 0.45);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
 button {
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  background: #ffffff;
   color: var(--text);
   padding: 10px 12px;
   border-radius: 10px;
   cursor: pointer;
+  transition: transform 0.02s ease, box-shadow 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+button:hover {
+  border-color: rgba(15, 23, 42, 0.16);
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.06);
+}
+
+button:active {
+  transform: translateY(1px);
 }
 
 button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+  box-shadow: none;
 }
 
 button.primary {
-  border-color: rgba(90, 167, 255, 0.35);
-  background: rgba(90, 167, 255, 0.12);
+  border-color: rgba(37, 99, 235, 0.35);
+  background: var(--primary-soft);
+  color: #0b1f52;
 }
 
 button.danger {
-  border-color: rgba(255, 90, 122, 0.35);
-  background: rgba(255, 90, 122, 0.12);
+  border-color: rgba(220, 38, 38, 0.35);
+  background: var(--danger-soft);
+  color: #5a0b0b;
 }
 
 .divider {
   height: 1px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.08);
   margin: 14px 0;
 }
 
@@ -130,21 +303,21 @@ button.danger {
   margin-top: 10px;
 }
 
-.grid {
+.grid-2 {
   display: grid;
   gap: 14px;
   grid-template-columns: 1fr;
 }
 
-@media (min-width: 920px) {
-  .grid {
+@media (min-width: 980px) {
+  .grid-2 {
     grid-template-columns: 1fr 1fr;
   }
 }
 
 .pre {
-  background: rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: #f8fafc;
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 12px;
   min-height: 220px;
@@ -152,11 +325,58 @@ button.danger {
 }
 
 .list {
-  background: rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: #f8fafc;
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 12px;
   min-height: 220px;
+}
+
+.list.slim {
+  min-height: auto;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  background: #ffffff;
+  margin: 6px 8px 0 0;
+}
+
+.pill button {
+  padding: 6px 8px;
+}
+
+.seg {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 12px;
+  background: #ffffff;
+  margin-bottom: 10px;
+}
+
+.seg textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  background: #f8fafc;
+  resize: vertical;
+  min-height: 62px;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.seg select {
+  min-width: 0;
+  width: 100%;
 }
 
 .item {
@@ -164,9 +384,10 @@ button.danger {
   grid-template-columns: 1fr auto;
   gap: 10px;
   padding: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 10px;
   margin-bottom: 10px;
+  background: #ffffff;
 }
 
 .item:last-child {
@@ -187,14 +408,15 @@ button.danger {
   display: inline-block;
   padding: 2px 8px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(15, 23, 42, 0.12);
   font-size: 12px;
   color: var(--muted);
 }
 
 .tag.ok {
-  border-color: rgba(61, 220, 151, 0.35);
-  color: rgba(61, 220, 151, 0.95);
+  border-color: rgba(22, 163, 74, 0.35);
+  color: #166534;
+  background: var(--ok-soft);
 }
 
 .item-actions {
@@ -232,5 +454,39 @@ button.danger {
 
 footer {
   margin-top: 18px;
+}
+
+.footer {
+  margin-top: 18px;
+}
+
+.view {
+  animation: fadeIn 0.12s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0.6;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 940px) {
+  .app {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    position: relative;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .main {
+    padding: 18px 14px 50px;
+  }
 }
 

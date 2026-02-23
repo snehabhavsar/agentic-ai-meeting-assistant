@@ -3,11 +3,15 @@ const $ = (id) => document.getElementById(id);
 const state = {
   projects: [],
   selectedProjectId: null,
+  selectedProjectName: null,
+  participants: [],
   meetingId: null,
   recorder: null,
   chunks: [],
   stream: null,
   mimeType: null,
+  view: "setup", // setup | record | intel
+  currentMeeting: null,
 };
 
 function pretty(obj) {
@@ -28,6 +32,93 @@ function fmtActionItem(ai) {
   const who = ai.who || "Unassigned";
   const willDo = ai.will_do || "do";
   return `${who} — ${willDo} — ${ai.what}${ai.by_when ? ` — By ${due}` : ""}`;
+}
+
+function setActiveNav() {
+  const map = {
+    setup: "navSetup",
+    record: "navRecord",
+    intel: "navIntel",
+  };
+  for (const key of Object.values(map)) {
+    $(key).classList.remove("active");
+  }
+  $(map[state.view]).classList.add("active");
+}
+
+function showView(view) {
+  state.view = view;
+  $("viewSetup").hidden = view !== "setup";
+  $("viewRecord").hidden = view !== "record";
+  $("viewIntel").hidden = view !== "intel";
+  setActiveNav();
+}
+
+function persistSelectedProject() {
+  try {
+    localStorage.setItem(
+      "meeting_ai_selected_project",
+      JSON.stringify({ id: state.selectedProjectId, name: state.selectedProjectName })
+    );
+  } catch {}
+}
+
+function restoreSelectedProject() {
+  try {
+    const raw = localStorage.getItem("meeting_ai_selected_project");
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (parsed?.id) {
+      state.selectedProjectId = Number(parsed.id);
+      state.selectedProjectName = parsed.name || null;
+    }
+  } catch {}
+}
+
+function updateSelectedProjectLabels() {
+  const label = state.selectedProjectName
+    ? `${state.selectedProjectName} (id=${state.selectedProjectId})`
+    : state.selectedProjectId
+      ? `Project id=${state.selectedProjectId}`
+      : "—";
+  $("selectedProjectLabel").textContent = label;
+  $("intelProjectLabel").textContent = label;
+}
+
+function renderProjectTree(filterText = "") {
+  const root = $("projectTree");
+  root.innerHTML = "";
+  const q = (filterText || "").trim().toLowerCase();
+  const items = (state.projects || []).filter((p) => !q || (p.name || "").toLowerCase().includes(q));
+
+  if (!items.length) {
+    root.innerHTML = `<div class="muted">No projects found.</div>`;
+    return;
+  }
+
+  for (const p of items) {
+    const el = document.createElement("div");
+    el.className = "project-node" + (p.id === state.selectedProjectId ? " active" : "");
+    el.innerHTML = `
+      <div class="project-icon">PR</div>
+      <div class="project-meta">
+        <div class="project-name">${escapeHtml(p.name)}</div>
+        <div class="project-id">id=${p.id}</div>
+      </div>
+    `;
+    el.addEventListener("click", async () => {
+      state.selectedProjectId = p.id;
+      state.selectedProjectName = p.name;
+      $("projectSelect").value = String(p.id);
+      persistSelectedProject();
+      updateSelectedProjectLabels();
+      renderProjectTree($("projectSearch").value);
+      // When selecting from the sidebar, jump to intelligence view.
+      showView("intel");
+      await loadHistory();
+    });
+    root.appendChild(el);
+  }
 }
 
 function renderPending(items) {
@@ -123,6 +214,8 @@ function renderMinutes(meeting) {
     return;
   }
 
+  state.currentMeeting = meeting;
+
   const summary = meeting.summary || null;
   const transcript = meeting.transcript || null;
 
@@ -158,6 +251,9 @@ function renderMinutes(meeting) {
       <p class="muted">${escapeHtml((transcript?.text || "").slice(0, 1200))}${(transcript?.text || "").length > 1200 ? "…" : ""}</p>
     </div>
   `;
+
+  // If speaker segments exist, render editor.
+  renderSegmentsEditor(transcript?.speaker_segments || []);
 }
 
 async function api(path, options = {}) {
@@ -192,11 +288,145 @@ async function refreshProjects() {
     sel.appendChild(opt);
   }
 
-  if (state.projects.length) {
+  // restore previous selection if present, else pick first
+  if (state.selectedProjectId && state.projects.some((p) => p.id === state.selectedProjectId)) {
+    sel.value = String(state.selectedProjectId);
+    const p = state.projects.find((x) => x.id === state.selectedProjectId);
+    state.selectedProjectName = p?.name || state.selectedProjectName;
+  } else if (state.projects.length) {
     state.selectedProjectId = Number(sel.value);
+    const p = state.projects.find((x) => x.id === state.selectedProjectId);
+    state.selectedProjectName = p?.name || null;
   } else {
     state.selectedProjectId = null;
+    state.selectedProjectName = null;
   }
+
+  updateSelectedProjectLabels();
+  renderProjectTree($("projectSearch").value);
+}
+
+async function loadParticipants() {
+  if (!state.selectedProjectId) return;
+  const payload = await api(`/api/projects/${state.selectedProjectId}/participants`, { method: "GET" });
+  const participants = payload?.project?.participants;
+  state.participants = Array.isArray(participants) ? participants : [];
+  renderParticipants();
+}
+
+async function saveParticipants() {
+  if (!state.selectedProjectId) throw new Error("Select a project first");
+  const payload = await api(`/api/projects/${state.selectedProjectId}/participants`, {
+    method: "PUT",
+    body: JSON.stringify({ participants: state.participants }),
+  });
+  const participants = payload?.project?.participants;
+  state.participants = Array.isArray(participants) ? participants : state.participants;
+  $("participantsStatus").textContent = "Saved.";
+  renderParticipants();
+}
+
+function renderParticipants() {
+  const root = $("participantsList");
+  root.innerHTML = "";
+  if (!state.participants.length) {
+    root.innerHTML = `<div class="muted">No participants yet. Add names like Alice, Bob, Mentor.</div>`;
+    return;
+  }
+  const wrap = document.createElement("div");
+  for (const p of state.participants) {
+    const pill = document.createElement("span");
+    pill.className = "pill";
+    pill.innerHTML = `
+      <span>${escapeHtml(p)}</span>
+      <button data-name="${escapeHtml(p)}">Remove</button>
+    `;
+    pill.querySelector("button").addEventListener("click", () => {
+      state.participants = state.participants.filter((x) => x !== p);
+      renderParticipants();
+    });
+    wrap.appendChild(pill);
+  }
+  root.appendChild(wrap);
+}
+
+function renderSegmentsEditor(segments) {
+  const root = $("segmentsEditor");
+  root.innerHTML = "";
+  $("segmentsStatus").textContent = "";
+
+  if (!segments || !segments.length) {
+    root.innerHTML = `<div class="muted">No segments yet. Click “Generate segments”.</div>`;
+    $("saveSegmentsBtn").disabled = true;
+    return;
+  }
+
+  const speakerOptions = ["(Unassigned)", ...state.participants];
+
+  for (const seg of segments) {
+    const el = document.createElement("div");
+    el.className = "seg";
+    const speaker = seg.speaker || "";
+    el.innerHTML = `
+      <div>
+        <div class="item-meta"><span class="tag">segment ${seg.idx}</span></div>
+        <select data-idx="${seg.idx}">
+          ${speakerOptions
+            .map((opt) => {
+              const val = opt === "(Unassigned)" ? "" : opt;
+              const sel = val === speaker ? "selected" : "";
+              return `<option value="${escapeHtml(val)}" ${sel}>${escapeHtml(opt)}</option>`;
+            })
+            .join("")}
+        </select>
+      </div>
+      <div>
+        <textarea data-text-idx="${seg.idx}">${escapeHtml(seg.text || "")}</textarea>
+      </div>
+    `;
+    root.appendChild(el);
+  }
+
+  $("saveSegmentsBtn").disabled = false;
+}
+
+function downloadJson(filename, obj) {
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function generateSegments() {
+  if (!state.currentMeeting?.id) throw new Error("Open a meeting first");
+  const payload = await api(`/api/meetings/${state.currentMeeting.id}/speaker_segments/generate`, { method: "POST" });
+  renderSegmentsEditor(payload.transcript?.speaker_segments || []);
+  $("segmentsStatus").textContent = "Generated segments.";
+}
+
+async function saveSegments() {
+  if (!state.currentMeeting?.id) throw new Error("Open a meeting first");
+  const root = $("segmentsEditor");
+  const selects = Array.from(root.querySelectorAll("select[data-idx]"));
+  const segs = selects.map((sel) => {
+    const idx = Number(sel.getAttribute("data-idx"));
+    const speaker = sel.value || null;
+    const ta = root.querySelector(`textarea[data-text-idx="${idx}"]`);
+    const text = ta ? ta.value.trim() : "";
+    return { idx, speaker, text };
+  });
+
+  const payload = await api(`/api/meetings/${state.currentMeeting.id}/speaker_segments`, {
+    method: "PATCH",
+    body: JSON.stringify({ speaker_segments: segs }),
+  });
+  $("segmentsStatus").textContent = "Saved speaker labels.";
+  renderSegmentsEditor(payload.transcript?.speaker_segments || []);
 }
 
 async function createProject() {
@@ -211,6 +441,10 @@ async function createProject() {
   await refreshProjects();
   $("projectSelect").value = String(payload.project.id);
   state.selectedProjectId = payload.project.id;
+  state.selectedProjectName = payload.project.name;
+  persistSelectedProject();
+  updateSelectedProjectLabels();
+  renderProjectTree($("projectSearch").value);
 }
 
 function setRecStatus(s) {
@@ -280,12 +514,21 @@ async function startRecording() {
       }
 
       $("meetingStatus").textContent = "Processing meeting (ASR + summary + action items)...";
-      const processed = await api(`/api/meetings/${state.meetingId}/process`, { method: "POST" });
+      await api(`/api/meetings/${state.meetingId}/process`, {
+        method: "POST",
+        body: JSON.stringify({ async: true }),
+      });
 
-      $("meetingStatus").textContent = "Done. Showing latest meeting + pending items.";
-      renderMinutes(processed.meeting);
+      await pollUntilDone(state.meetingId, (m) => {
+        const pct = m.processing_progress ?? 0;
+        const stage = m.processing_stage || "processing";
+        $("meetingStatus").textContent = `Processing… ${pct}% (${stage})`;
+      });
 
+      $("meetingStatus").textContent = "Done. Opening Project Intelligence.";
+      showView("intel");
       await loadHistory();
+      $("viewIntelBtn").disabled = false;
     } catch (err) {
       $("meetingStatus").textContent = `Error: ${err.message}`;
     } finally {
@@ -321,6 +564,9 @@ async function loadHistory() {
     renderMinutes(payload.meetings[0]);
   }
 
+  renderMeetingsList(payload.meetings || []);
+  await loadParticipants();
+
   // Completed items are fetched on-demand to keep /history lean.
   const showCompleted = $("showCompletedToggle")?.checked;
   if (showCompleted) {
@@ -333,13 +579,90 @@ async function loadHistory() {
   }
 }
 
+async function pollUntilDone(meetingId, onUpdate) {
+  const maxMs = 60 * 60 * 1000; // 1 hour demo safety
+  const start = Date.now();
+  while (Date.now() - start < maxMs) {
+    const payload = await api(`/api/meetings/${meetingId}`, { method: "GET" });
+    const m = payload.meeting;
+    if (onUpdate) onUpdate(m);
+    if (m.status === "processed") {
+      renderMinutes(m);
+      return m;
+    }
+    if (m.status === "failed") {
+      throw new Error(m.processing_error || "processing failed");
+    }
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+  throw new Error("processing timeout");
+}
+
+function renderMeetingsList(meetings) {
+  const root = $("meetingsList");
+  root.innerHTML = "";
+  if (!meetings || !meetings.length) {
+    root.innerHTML = `<div class="muted">No meetings yet. Record your first meeting.</div>`;
+    return;
+  }
+
+  for (const m of meetings) {
+    const el = document.createElement("div");
+    el.className = "item";
+    const title = m.title || `Meeting ${m.id}`;
+    el.innerHTML = `
+      <div>
+        <div class="item-title">${escapeHtml(title)}</div>
+        <div class="item-meta">
+          <span class="tag">id=${m.id}</span>
+          <span class="tag">status=${escapeHtml(m.status)}</span>
+          <span class="tag">created=${escapeHtml((m.created_at || "").slice(0, 19).replace("T", " "))}</span>
+        </div>
+      </div>
+      <div class="item-actions">
+        <button class="primary">Open</button>
+      </div>
+    `;
+    el.querySelector("button").addEventListener("click", async () => {
+      try {
+        const payload = await api(`/api/meetings/${m.id}`, { method: "GET" });
+        state.meetingId = payload.meeting.id;
+        renderMinutes(payload.meeting);
+      } catch (e) {
+        $("meetingStatus").textContent = `Error: ${e.message}`;
+      }
+    });
+    root.appendChild(el);
+  }
+}
+
 function wire() {
+  // Nav
+  $("navSetup").addEventListener("click", () => showView("setup"));
+  $("navRecord").addEventListener("click", () => showView("record"));
+  $("navIntel").addEventListener("click", async () => {
+    showView("intel");
+    if (state.selectedProjectId) await loadHistory();
+  });
+
   $("refreshProjectsBtn").addEventListener("click", async () => {
     try {
       await refreshProjects();
     } catch (e) {
       $("projectStatus").textContent = `Error: ${e.message}`;
     }
+  });
+
+  $("useProjectBtn").addEventListener("click", () => {
+    if (!state.selectedProjectId) {
+      $("projectStatus").textContent = "Select a project first.";
+      return;
+    }
+    const p = state.projects.find((x) => x.id === state.selectedProjectId);
+    state.selectedProjectName = p?.name || state.selectedProjectName;
+    persistSelectedProject();
+    updateSelectedProjectLabels();
+    showView("record");
   });
 
   $("createProjectBtn").addEventListener("click", async () => {
@@ -352,10 +675,20 @@ function wire() {
 
   $("projectSelect").addEventListener("change", (e) => {
     state.selectedProjectId = Number(e.target.value);
+    const p = state.projects.find((x) => x.id === state.selectedProjectId);
+    state.selectedProjectName = p?.name || null;
+    persistSelectedProject();
+    updateSelectedProjectLabels();
+    renderProjectTree($("projectSearch").value);
+  });
+
+  $("projectSearch").addEventListener("input", (e) => {
+    renderProjectTree(e.target.value);
   });
 
   $("startBtn").addEventListener("click", async () => {
     try {
+      $("viewIntelBtn").disabled = true;
       await startRecording();
     } catch (e) {
       $("meetingStatus").textContent = `Error: ${e.message}`;
@@ -408,14 +741,126 @@ function wire() {
       $("aiStatus").textContent = `Error: ${e.message}`;
     }
   });
+
+  $("viewIntelBtn").addEventListener("click", async () => {
+    showView("intel");
+    await loadHistory();
+  });
+
+  // Upload recording
+  $("uploadFile").addEventListener("change", () => {
+    const f = $("uploadFile").files?.[0];
+    $("uploadProcessBtn").disabled = !f;
+  });
+
+  $("uploadProcessBtn").addEventListener("click", async () => {
+    try {
+      const file = $("uploadFile").files?.[0];
+      if (!file) throw new Error("Choose an audio file first");
+      if (!state.selectedProjectId) throw new Error("Select a project first");
+
+      $("uploadStatus").textContent = "Creating meeting...";
+      const title = $("uploadTitle").value.trim() || file.name;
+      const started = await api("/api/meetings/start", {
+        method: "POST",
+        body: JSON.stringify({ project_id: state.selectedProjectId, title }),
+      });
+      state.meetingId = started.meeting.id;
+      setMeetingId(state.meetingId);
+
+      await api(`/api/meetings/${state.meetingId}/stop`, { method: "POST", body: JSON.stringify({}) });
+
+      $("uploadStatus").textContent = "Uploading audio...";
+      const fd = new FormData();
+      fd.append("audio", file, file.name);
+      const uploadRes = await fetch(`/api/meetings/${state.meetingId}/upload_audio`, { method: "POST", body: fd });
+      if (!uploadRes.ok) throw new Error(await uploadRes.text());
+
+      $("uploadStatus").textContent = "Processing...";
+      await api(`/api/meetings/${state.meetingId}/process`, {
+        method: "POST",
+        body: JSON.stringify({ async: true }),
+      });
+      await pollUntilDone(state.meetingId, (m) => {
+        const pct = m.processing_progress ?? 0;
+        const stage = m.processing_stage || "processing";
+        $("uploadStatus").textContent = `Processing… ${pct}% (${stage})`;
+      });
+      $("uploadStatus").textContent = "Done. Opening Project Intelligence.";
+      showView("intel");
+      await loadHistory();
+    } catch (e) {
+      $("uploadStatus").textContent = `Error: ${e.message}`;
+    }
+  });
+
+  // Participants + speaker labeling
+  $("addParticipantBtn").addEventListener("click", () => {
+    const name = $("participantInput").value.trim();
+    if (!name) return;
+    if (!state.participants.includes(name)) state.participants.push(name);
+    $("participantInput").value = "";
+    $("participantsStatus").textContent = "";
+    renderParticipants();
+  });
+
+  $("saveParticipantsBtn").addEventListener("click", async () => {
+    try {
+      $("participantsStatus").textContent = "Saving...";
+      await saveParticipants();
+    } catch (e) {
+      $("participantsStatus").textContent = `Error: ${e.message}`;
+    }
+  });
+
+  $("generateSegmentsBtn").addEventListener("click", async () => {
+    try {
+      $("segmentsStatus").textContent = "Generating...";
+      await generateSegments();
+    } catch (e) {
+      $("segmentsStatus").textContent = `Error: ${e.message}`;
+    }
+  });
+
+  $("saveSegmentsBtn").addEventListener("click", async () => {
+    try {
+      $("segmentsStatus").textContent = "Saving...";
+      await saveSegments();
+    } catch (e) {
+      $("segmentsStatus").textContent = `Error: ${e.message}`;
+    }
+  });
+
+  // Export / Print
+  $("exportJsonBtn").addEventListener("click", async () => {
+    try {
+      if (!state.currentMeeting?.id) throw new Error("Open a meeting first");
+      const payload = await api(`/api/meetings/${state.currentMeeting.id}/export`, { method: "GET" });
+      downloadJson(`meeting_${state.currentMeeting.id}_minutes.json`, payload);
+    } catch (e) {
+      $("meetingStatus").textContent = `Error: ${e.message}`;
+    }
+  });
+
+  $("printBtn").addEventListener("click", () => {
+    window.print();
+  });
 }
 
 async function main() {
+  restoreSelectedProject();
   wire();
   try {
     await refreshProjects();
   } catch (e) {
     $("projectStatus").textContent = `Error loading projects: ${e.message}`;
+  }
+
+  // Default: if no projects exist, stay on setup; else go to record.
+  if (state.selectedProjectId) {
+    showView("record");
+  } else {
+    showView("setup");
   }
 }
 

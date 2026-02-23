@@ -20,16 +20,29 @@ class Project(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False, unique=True)
     description = db.Column(db.Text, nullable=True)
+    # Lightweight participant storage for manual speaker labeling (viva-friendly).
+    # Stored as JSON string: ["Alice", "Bob", ...]
+    participants_json = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
     meetings = db.relationship("Meeting", back_populates="project", cascade="all, delete-orphan")
     action_items = db.relationship("ActionItem", back_populates="project", cascade="all, delete-orphan")
 
     def to_dict(self) -> dict:
+        participants = None
+        try:
+            import json
+
+            participants = json.loads(self.participants_json) if self.participants_json else []
+        except Exception:
+            participants = None
+
         return {
             "id": self.id,
             "name": self.name,
             "description": self.description,
+            "participants_json": self.participants_json,
+            "participants": participants,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -56,6 +69,10 @@ class Meeting(db.Model):
     # status: created -> audio_uploaded -> processed (or failed)
     status = db.Column(db.String(40), nullable=False, default="created", index=True)
     processing_error = db.Column(db.Text, nullable=True)
+    processing_stage = db.Column(db.String(80), nullable=True)  # e.g. "asr", "summary"
+    processing_progress = db.Column(db.Integer, nullable=True)  # 0..100
+    processing_started_at = db.Column(db.DateTime, nullable=True)
+    processing_finished_at = db.Column(db.DateTime, nullable=True)
 
     project = db.relationship("Project", back_populates="meetings")
     transcript = db.relationship("Transcript", uselist=False, back_populates="meeting", cascade="all, delete-orphan")
@@ -72,6 +89,10 @@ class Meeting(db.Model):
             "audio_path": self.audio_path,
             "status": self.status,
             "processing_error": self.processing_error,
+            "processing_stage": self.processing_stage,
+            "processing_progress": self.processing_progress,
+            "processing_started_at": self.processing_started_at.isoformat() if self.processing_started_at else None,
+            "processing_finished_at": self.processing_finished_at.isoformat() if self.processing_finished_at else None,
         }
         if include_children:
             payload["transcript"] = self.transcript.to_dict() if self.transcript else None
@@ -92,17 +113,30 @@ class Transcript(db.Model):
     text = db.Column(db.Text, nullable=False)
     language = db.Column(db.String(20), nullable=True)
     model_name = db.Column(db.String(100), nullable=True)  # e.g. "whisper-small"
+    # Manual speaker labeling (segments) stored as JSON string:
+    # [{ "idx": 1, "speaker": "Alice", "text": "..." }, ...]
+    speaker_segments_json = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
     meeting = db.relationship("Meeting", back_populates="transcript")
 
     def to_dict(self) -> dict:
+        segments = None
+        try:
+            import json
+
+            segments = json.loads(self.speaker_segments_json) if self.speaker_segments_json else []
+        except Exception:
+            segments = None
+
         return {
             "id": self.id,
             "meeting_id": self.meeting_id,
             "text": self.text,
             "language": self.language,
             "model_name": self.model_name,
+            "speaker_segments_json": self.speaker_segments_json,
+            "speaker_segments": segments,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 

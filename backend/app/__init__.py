@@ -1,7 +1,9 @@
 import os
+from urllib.parse import unquote, urlparse
 
 from flask import Flask
 from flask_cors import CORS
+from sqlalchemy import text
 
 from .config import Config
 from .db import db
@@ -16,7 +18,11 @@ def create_app(config_object: type[Config] | None = None) -> Flask:
     - Cleaner separation of concerns
     - Allows different configs (dev/test/prod)
     """
-    app = Flask(__name__, instance_relative_config=True)
+    backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    instance_path = os.path.join(backend_dir, "instance")
+
+    # Pin instance_path so SQLite location is deterministic (backend/instance/*).
+    app = Flask(__name__, instance_relative_config=True, instance_path=instance_path)
     CORS(app)  # simple cross-origin support for local React dev server
 
     # Ensure instance folder exists (SQLite file lives here by default).
@@ -24,6 +30,33 @@ def create_app(config_object: type[Config] | None = None) -> Flask:
 
     config_object = config_object or Config
     app.config.from_object(config_object)
+
+    # Finalize DB URI after instance_path is known.
+    # - If DATABASE_URL is set, we use it (e.g., Postgres)
+    # - Else we default to SQLite file inside backend/instance/
+    if not app.config.get("SQLALCHEMY_DATABASE_URI"):
+        sqlite_file = os.path.join(app.instance_path, "meeting_ai.sqlite")
+        app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{sqlite_file}"
+
+    # If using a SQLite file path (including via DATABASE_URL), ensure the parent
+    # directory exists so sqlite can create/open the DB.
+    uri = app.config.get("SQLALCHEMY_DATABASE_URI", "") or ""
+    if uri.startswith("sqlite:") and ":memory:" not in uri:
+        parsed = urlparse(uri)
+        db_path = unquote(parsed.path or "")
+
+        # Example forms:
+        # - sqlite:////abs/path/to.db  -> parsed.path = /abs/path/to.db
+        # - sqlite:///relative.db      -> parsed.path = /relative.db (relative to cwd)
+        # We make relative paths resolve under backend/ for determinism.
+        if db_path.startswith("/") and not os.path.isabs(db_path):
+            # defensive; os.path.isabs("/") is True, so this rarely triggers
+            db_path = os.path.join(backend_dir, db_path.lstrip("/"))
+
+        if db_path and os.path.isabs(db_path):
+            os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        elif db_path:
+            os.makedirs(os.path.dirname(os.path.join(backend_dir, db_path.lstrip("/"))), exist_ok=True)
 
     db.init_app(app)
 
@@ -42,6 +75,36 @@ def create_app(config_object: type[Config] | None = None) -> Flask:
     # In later phases, we can add Flask-Migrate for migrations.
     with app.app_context():
         db.create_all()
+
+        # Prototype "auto-migration" for SQLite: add new columns if missing.
+        # This avoids asking you to delete instance DB during demos.
+        uri = app.config.get("SQLALCHEMY_DATABASE_URI", "") or ""
+        if uri.startswith("sqlite:"):
+            # projects.participants_json
+            cols = db.session.execute(text("PRAGMA table_info(projects)")).all()
+            col_names = {c[1] for c in cols}  # second column is name
+            if "participants_json" not in col_names:
+                db.session.execute(text("ALTER TABLE projects ADD COLUMN participants_json TEXT"))
+
+            # transcripts.speaker_segments_json
+            cols = db.session.execute(text("PRAGMA table_info(transcripts)")).all()
+            col_names = {c[1] for c in cols}
+            if "speaker_segments_json" not in col_names:
+                db.session.execute(text("ALTER TABLE transcripts ADD COLUMN speaker_segments_json TEXT"))
+
+            # meetings processing tracking
+            cols = db.session.execute(text("PRAGMA table_info(meetings)")).all()
+            col_names = {c[1] for c in cols}
+            if "processing_stage" not in col_names:
+                db.session.execute(text("ALTER TABLE meetings ADD COLUMN processing_stage TEXT"))
+            if "processing_progress" not in col_names:
+                db.session.execute(text("ALTER TABLE meetings ADD COLUMN processing_progress INTEGER"))
+            if "processing_started_at" not in col_names:
+                db.session.execute(text("ALTER TABLE meetings ADD COLUMN processing_started_at DATETIME"))
+            if "processing_finished_at" not in col_names:
+                db.session.execute(text("ALTER TABLE meetings ADD COLUMN processing_finished_at DATETIME"))
+
+            db.session.commit()
 
     @app.get("/health")
     def health():

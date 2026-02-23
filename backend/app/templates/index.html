@@ -7,93 +7,206 @@
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
-    <div class="container">
-      <header>
-        <h1>Meeting AI</h1>
-        <p class="subtitle">Project-based meeting recording, context retention, and actionable intelligence</p>
-      </header>
-
-      <section class="card">
-        <h2>1) Project</h2>
-        <div class="row">
-          <label>
-            Select existing:
-            <select id="projectSelect"></select>
-          </label>
-          <button id="refreshProjectsBtn">Refresh</button>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-title">Meeting AI</div>
+          <div class="brand-sub">Project-based minutes + action intelligence</div>
         </div>
 
-        <div class="divider"></div>
-
-        <h3>Create new project</h3>
-        <div class="row">
-          <input id="projectName" placeholder="Project name" />
-          <input id="projectDesc" placeholder="Description (optional)" />
-          <button id="createProjectBtn">Create</button>
+        <div class="nav">
+          <button id="navSetup" class="nav-btn">Setup</button>
+          <button id="navRecord" class="nav-btn">Record</button>
+          <button id="navIntel" class="nav-btn">Project Intelligence</button>
         </div>
-        <div id="projectStatus" class="status"></div>
-      </section>
 
-      <section class="card">
-        <h2>2) Meeting recording (laptop mic)</h2>
-        <div class="row">
-          <input id="meetingTitle" placeholder="Meeting title (optional)" />
-        </div>
-        <div class="row">
-          <button id="startBtn" class="primary">Start Recording</button>
-          <button id="stopBtn" class="danger" disabled>Stop</button>
-        </div>
-        <div class="row small">
-          <span><b>Status:</b> <span id="recStatus">idle</span></span>
-          <span><b>Meeting ID:</b> <span id="meetingId">—</span></span>
-        </div>
-        <audio id="playback" controls class="audio" hidden></audio>
-        <div id="meetingStatus" class="status"></div>
-      </section>
-
-      <section class="card">
-        <h2>3) Output (minutes + pending action items)</h2>
-        <div class="row">
-          <button id="loadHistoryBtn">Load Project History</button>
-          <label class="row small" style="margin-left: 8px">
-            <input type="checkbox" id="showCompletedToggle" />
-            Show completed action items
-          </label>
-        </div>
-        <div class="grid">
-          <div>
-            <h3>Pending action items (carry-forward)</h3>
-            <div id="pendingItemsList" class="list"></div>
-
-            <div class="divider"></div>
-            <h3>Add action item manually (demo/correction)</h3>
-            <div class="row">
-              <input id="aiWho" placeholder="Who (optional)" />
-              <input id="aiWillDo" placeholder="Will do (optional, e.g., 'prepare')" />
-            </div>
-            <div class="row">
-              <input id="aiWhat" placeholder="What (required)" style="min-width: 360px" />
-              <input id="aiByWhen" placeholder="By when (YYYY-MM-DD, optional)" />
-              <button id="addAiBtn" class="primary">Add</button>
-            </div>
-            <div id="aiStatus" class="status"></div>
-
-            <div class="divider"></div>
-            <h3>Completed action items</h3>
-            <div id="completedItemsList" class="list"></div>
-          </div>
-          <div>
-            <h3>Latest processed meeting</h3>
-            <div id="latestMinutes" class="pre"></div>
+        <div class="sidebar-section">
+          <div class="sidebar-title">Project Explorer</div>
+          <input id="projectSearch" class="sidebar-input" placeholder="Search projects…" />
+          <div id="projectTree" class="project-tree"></div>
+          <div class="sidebar-hint muted">
+            Projects are shown like folders. Select one to view details.
           </div>
         </div>
-      </section>
 
-      <footer>
-        <p class="muted">
-          Phase 2 prototype UI (no React build). Next phases: Whisper ASR + Transformers summarization + improved extraction.
-        </p>
-      </footer>
+        <div class="sidebar-footer muted">
+          Lightweight: SQLite + ffmpeg + whisper.cpp (optional)
+        </div>
+      </aside>
+
+      <main class="main">
+        <!-- SETUP VIEW -->
+        <section id="viewSetup" class="view">
+          <div class="page-header">
+            <h1>Setup</h1>
+            <p class="subtitle">Create a project or pick an existing one. Then proceed to recording.</p>
+          </div>
+
+          <div class="card">
+            <h2>Select an existing project</h2>
+            <div class="row">
+              <select id="projectSelect"></select>
+              <button id="refreshProjectsBtn">Refresh</button>
+              <button id="useProjectBtn" class="primary">Use this project</button>
+            </div>
+            <div id="projectStatus" class="status"></div>
+          </div>
+
+          <div class="card">
+            <h2>Create a new project</h2>
+            <div class="row">
+              <input id="projectName" placeholder="Project name (required)" />
+              <input id="projectDesc" placeholder="Description (optional)" />
+              <button id="createProjectBtn" class="primary">Create Project</button>
+            </div>
+            <div class="status muted">
+              Tip: Use the project name as your “folder name” for the viva demo.
+            </div>
+          </div>
+        </section>
+
+        <!-- RECORD VIEW -->
+        <section id="viewRecord" class="view" hidden>
+          <div class="page-header">
+            <h1>Record meeting</h1>
+            <p class="subtitle">
+              Selected project: <b id="selectedProjectLabel">—</b>
+            </p>
+          </div>
+
+          <div class="card">
+            <h2>Meeting info</h2>
+            <div class="row">
+              <input id="meetingTitle" placeholder="Meeting title (optional)" />
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Microphone recording</h2>
+            <div class="row">
+              <button id="startBtn" class="primary">Start Recording</button>
+              <button id="stopBtn" class="danger" disabled>Stop</button>
+              <button id="viewIntelBtn" disabled>View Project Intelligence</button>
+            </div>
+            <div class="row small">
+              <span><b>Status:</b> <span id="recStatus">idle</span></span>
+              <span><b>Meeting ID:</b> <span id="meetingId">—</span></span>
+            </div>
+            <audio id="playback" controls class="audio" hidden></audio>
+            <div id="meetingStatus" class="status"></div>
+          </div>
+
+          <div class="card">
+            <h2>Upload an existing recording</h2>
+            <p class="subtitle" style="margin-top: -6px">
+              If you already have an audio file (.wav/.mp3/.m4a/.webm), upload it and process it under the selected
+              project.
+            </p>
+            <div class="row">
+              <input id="uploadTitle" placeholder="Meeting title (optional)" class="grow" />
+              <input id="uploadFile" type="file" accept="audio/*" />
+              <button id="uploadProcessBtn" class="primary" disabled>Upload & Process</button>
+            </div>
+            <div id="uploadStatus" class="status"></div>
+          </div>
+        </section>
+
+        <!-- INTELLIGENCE VIEW -->
+        <section id="viewIntel" class="view" hidden>
+          <div class="page-header">
+            <h1>Project Intelligence</h1>
+            <p class="subtitle">
+              Selected project: <b id="intelProjectLabel">—</b>
+            </p>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <div class="row between">
+                <h2>Meetings (history)</h2>
+                <button id="loadHistoryBtn" class="primary">Refresh</button>
+              </div>
+              <div id="meetingsList" class="list"></div>
+              <div class="status muted">Click a meeting to view minutes.</div>
+            </div>
+
+            <div class="card">
+              <h2>Meeting minutes</h2>
+              <div class="row" style="margin-top: -6px">
+                <button id="exportJsonBtn">Export JSON</button>
+                <button id="printBtn">Print / Save PDF</button>
+              </div>
+              <div id="latestMinutes" class="pre"></div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <div class="row between">
+                <h2>Participants (for manual speaker labels)</h2>
+                <button id="saveParticipantsBtn" class="primary">Save</button>
+              </div>
+              <div class="row">
+                <input id="participantInput" placeholder="Add participant name (e.g., Alice)" class="grow" />
+                <button id="addParticipantBtn">Add</button>
+              </div>
+              <div id="participantsList" class="list"></div>
+              <div id="participantsStatus" class="status"></div>
+            </div>
+
+            <div class="card">
+              <div class="row between">
+                <h2>Speaker labeling (manual)</h2>
+                <div class="row">
+                  <button id="generateSegmentsBtn">Generate segments</button>
+                  <button id="saveSegmentsBtn" class="primary" disabled>Save labels</button>
+                </div>
+              </div>
+              <div class="status muted">
+                This is a lightweight alternative to diarization: we split the transcript into segments and you choose
+                the speaker.
+              </div>
+              <div id="segmentsEditor" class="list"></div>
+              <div id="segmentsStatus" class="status"></div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <div class="row between">
+                <h2>Pending action items (carry-forward)</h2>
+                <label class="row small">
+                  <input type="checkbox" id="showCompletedToggle" />
+                  Show completed
+                </label>
+              </div>
+              <div id="pendingItemsList" class="list"></div>
+
+              <div class="divider"></div>
+              <h3>Add action item manually (demo/correction)</h3>
+              <div class="row">
+                <input id="aiWho" placeholder="Who (optional)" />
+                <input id="aiWillDo" placeholder="Will do (optional, e.g., 'prepare')" />
+              </div>
+              <div class="row">
+                <input id="aiWhat" placeholder="What (required)" class="grow" />
+                <input id="aiByWhen" placeholder="By when (YYYY-MM-DD, optional)" />
+                <button id="addAiBtn" class="primary">Add</button>
+              </div>
+              <div id="aiStatus" class="status"></div>
+            </div>
+
+            <div class="card">
+              <h2>Completed action items</h2>
+              <div id="completedItemsList" class="list"></div>
+            </div>
+          </div>
+        </section>
+
+        <footer class="footer muted">
+          One command to run → everything else in the UI.
+        </footer>
+      </main>
     </div>
 
     <script src="/static/app.js"></script>

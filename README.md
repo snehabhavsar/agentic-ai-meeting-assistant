@@ -19,9 +19,19 @@ Web-based system to record meetings (via browser mic), store them under projects
 
 - Simple web UI served by Flask (`/`) to record from laptop mic and run post-meeting processing
 - Project-based context memory: previous summaries + pending action items are pulled during processing
-- Optional local ML (Whisper + Transformers) with safe fallbacks if not installed
+- Optional lightweight ASR (ffmpeg + whisper.cpp) with safe fallbacks if not installed
 
 ## Quickstart (backend)
+
+## Quickstart (one command)
+
+From the repo root:
+
+```bash
+bash run.sh
+```
+
+This will start the server and print the local URL.
 
 ### 1) Create venv + install deps
 
@@ -30,12 +40,6 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-Optional (enable local Whisper + Transformers):
-
-```bash
-pip install -r requirements-ml.txt
 ```
 
 ### 2) Run the API
@@ -56,6 +60,39 @@ Open `http://127.0.0.1:5000/`:
 - Start Recording → Stop
 - Audio uploads automatically → Processing runs → minutes appear
 
+## Enable real transcription (lightweight): ffmpeg + whisper.cpp
+
+### Install system tools (macOS)
+
+```bash
+brew install ffmpeg
+brew install whisper-cpp
+```
+
+### Download a whisper.cpp model file
+
+```bash
+mkdir -p ~/models/whisper
+curl -L --progress-bar -o ~/models/whisper/ggml-small.bin \\
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin
+```
+
+### Run Flask with whisper.cpp enabled
+
+```bash
+cd backend
+source .venv/bin/activate
+mkdir -p instance
+
+export WHISPER_CPP_MODEL=\"$HOME/models/whisper/ggml-small.bin\"
+# optional (only if auto-detect fails)
+export WHISPER_CPP_BIN=\"whisper-cli\"
+# optional language
+export WHISPER_CPP_LANG=\"en\"
+
+python run.py
+```
+
 ### 3) Initialize the database (SQLite by default)
 
 On first run, tables are created automatically.
@@ -63,5 +100,5 @@ On first run, tables are created automatically.
 ## Notes
 
 - For prototype we use SQLite (`instance/meeting_ai.sqlite`). You can switch to PostgreSQL by setting `DATABASE_URL`.
-- Whisper/Transformers are optional. If not installed, the pipeline runs with explainable fallbacks so you can still demo the end-to-end project flow.
+- whisper.cpp is optional. If not installed, the pipeline runs with explainable fallbacks so you can still demo the end-to-end project flow.
 

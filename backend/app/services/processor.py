@@ -1,12 +1,48 @@
 from __future__ import annotations
 
 import json
+import os
 
 from ..db import db
 from ..models import ActionItem, Meeting, Summary, Transcript
 from .action_extractor import extract_decisions_and_actions
-from .asr_whisper import transcribe_with_whisper
+from ..config import Config
+from .asr_whispercpp import transcribe_with_whispercpp
 from .summarizer import fallback_summary, summarize_with_transformers
+
+
+def _norm(s: str | None) -> str:
+    import re
+
+    s = (s or "").lower()
+    s = re.sub(r"[^a-z0-9\s]+", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+
+def _split_into_segments(transcript_text: str) -> list[dict]:
+    """
+    Lightweight segmentation for manual speaker labeling.
+    We avoid heavy diarization; instead we split text and let the user assign speakers.
+    """
+    import re
+
+    text = (transcript_text or "").strip()
+    if not text:
+        return []
+
+    # Prefer line breaks if present (whisper.cpp often outputs them).
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    if len(lines) >= 4:
+        parts = lines
+    else:
+        # Fallback: naive sentence split.
+        parts = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+
+    segments: list[dict] = []
+    for i, seg_text in enumerate(parts, start=1):
+        segments.append({"idx": i, "speaker": None, "text": seg_text})
+    return segments
 
 
 def _auto_resolve_action_items_from_transcript(meeting: Meeting, transcript_text: str) -> int:
@@ -90,16 +126,44 @@ def process_meeting(meeting: Meeting) -> Meeting:
     if not meeting.audio_path:
         raise ValueError("meeting has no audio_path")
 
+    # mark processing start
+    from datetime import datetime
+
+    meeting.status = "processing"
+    meeting.processing_stage = "asr"
+    meeting.processing_progress = 0
+    meeting.processing_started_at = datetime.utcnow()
+    meeting.processing_finished_at = None
+    meeting.processing_error = None
+    db.session.commit()
+
     # --- ASR ---
     try:
-        asr = transcribe_with_whisper(meeting.audio_path, model_size="small")
+        # Prefer lightweight whisper.cpp if configured.
+        def _asr_progress(done, total):
+            # Scale ASR step to 0..80%.
+            pct = int((done / max(total, 1)) * 80)
+            meeting.processing_stage = "asr"
+            meeting.processing_progress = pct
+            db.session.commit()
+
+        asr = transcribe_with_whispercpp(
+            meeting.audio_path,
+            artifacts_dir=Config.ARTIFACTS_DIR,
+            output_basename=f"project_{meeting.project_id}_meeting_{meeting.id}",
+            model_path=os.environ.get("WHISPER_CPP_MODEL") or Config.WHISPER_CPP_MODEL,
+            bin_path=os.environ.get("WHISPER_CPP_BIN") or Config.WHISPER_CPP_BIN,
+            language=os.environ.get("WHISPER_CPP_LANG") or Config.WHISPER_CPP_LANG,
+            chunk_seconds=300,
+            progress_cb=_asr_progress,
+        )
         transcript_text = asr.text
         transcript_model = asr.model_name
         transcript_lang = asr.language
     except Exception:
-        # Keep runnable even without heavy ML deps.
+        # Keep runnable even without ASR installed.
         transcript_text = (
-            "ASR disabled (install backend/requirements-ml.txt to enable Whisper).\n"
+            "ASR disabled (install ffmpeg + whisper.cpp and set WHISPER_CPP_MODEL to enable ASR).\n"
             "This placeholder transcript keeps the pipeline demo-able."
         )
         transcript_model = "stub"
@@ -118,11 +182,23 @@ def process_meeting(meeting: Meeting) -> Meeting:
             model_name=transcript_model,
         )
         db.session.add(transcript)
+    db.session.commit()
+
+    # Generate segments for manual speaker labeling (only if not already present).
+    if not getattr(transcript, "speaker_segments_json", None):
+        try:
+            transcript.speaker_segments_json = json.dumps(_split_into_segments(transcript_text))
+        except Exception:
+            transcript.speaker_segments_json = None
 
     # --- Context memory (project-based) ---
     context_text = build_context_for_project(meeting.project_id)
 
     # --- Summarization ---
+    meeting.processing_stage = "summary"
+    meeting.processing_progress = max(meeting.processing_progress or 0, 85)
+    db.session.commit()
+
     summarization_input = "\n\n".join(
         [
             context_text if context_text else "PROJECT CONTEXT: (none)",
@@ -137,14 +213,38 @@ def process_meeting(meeting: Meeting) -> Meeting:
         summ = fallback_summary(summarization_input)
 
     # --- Extraction ---
+    meeting.processing_stage = "extract"
+    meeting.processing_progress = 92
+    db.session.commit()
+
     extraction = extract_decisions_and_actions(transcript_text)
 
     # --- Auto-resolve previous action items if transcript explicitly closes them ---
     _auto_resolve_action_items_from_transcript(meeting, transcript_text)
 
-    # Persist action items extracted in this meeting (project-scoped)
+    # Persist action items extracted in this meeting (project-scoped) with lightweight dedup.
+    existing_pending = (
+        ActionItem.query.filter_by(project_id=meeting.project_id, status="pending")
+        .order_by(ActionItem.created_at.asc())
+        .all()
+    )
+    existing_keys = {(_norm(ai.who), _norm(ai.what)) for ai in existing_pending}
+
     extracted_items_payload: list[dict] = []
     for item in extraction.action_items:
+        key = (_norm(item.who), _norm(item.what))
+        if key in existing_keys:
+            extracted_items_payload.append(
+                {
+                    "who": item.who,
+                    "will_do": item.will_do,
+                    "what": item.what,
+                    "by_when": item.by_when.isoformat() if item.by_when else None,
+                    "deduped": True,
+                }
+            )
+            continue
+
         ai = ActionItem(
             project_id=meeting.project_id,
             created_in_meeting_id=meeting.id,
@@ -155,6 +255,7 @@ def process_meeting(meeting: Meeting) -> Meeting:
             status="pending",
         )
         db.session.add(ai)
+        existing_keys.add(key)
         extracted_items_payload.append(
             {"who": item.who, "will_do": item.will_do, "what": item.what, "by_when": item.by_when.isoformat() if item.by_when else None}
         )
@@ -180,6 +281,9 @@ def process_meeting(meeting: Meeting) -> Meeting:
         db.session.add(summary)
 
     meeting.status = "processed"
+    meeting.processing_stage = "done"
+    meeting.processing_progress = 100
+    meeting.processing_finished_at = datetime.utcnow()
     meeting.processing_error = None
     db.session.commit()
     return meeting

@@ -15,9 +15,9 @@ class Config:
 
     # DB
     DATABASE_URL = os.environ.get("DATABASE_URL")
-    # Keep SQLite as a simple default for the prototype.
-    # Path is relative to backend/ when you run `python run.py` from backend/.
-    SQLALCHEMY_DATABASE_URI = DATABASE_URL or "sqlite:///instance/meeting_ai.sqlite"
+    # DB URI is finalized in the Flask app factory so we can safely base SQLite
+    # on the resolved `instance_path` (reliable even if cwd changes).
+    SQLALCHEMY_DATABASE_URI = DATABASE_URL or ""
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # Uploads / generated artifacts
@@ -29,4 +29,12 @@ class Config:
     ARTIFACTS_DIR = os.environ.get("ARTIFACTS_DIR", os.path.join(DATA_DIR, "artifacts"))
 
     MAX_CONTENT_LENGTH = int(os.environ.get("MAX_CONTENT_LENGTH", 200 * 1024 * 1024))  # 200MB
+
+    # Lightweight ASR via whisper.cpp (CLI)
+    # Example:
+    #   export WHISPER_CPP_MODEL="/path/to/ggml-small.bin"
+    #   export WHISPER_CPP_BIN="whisper-cli"
+    WHISPER_CPP_BIN = os.environ.get("WHISPER_CPP_BIN")  # optional; auto-detected if not set
+    WHISPER_CPP_MODEL = os.environ.get("WHISPER_CPP_MODEL")  # required to enable whisper.cpp ASR
+    WHISPER_CPP_LANG = os.environ.get("WHISPER_CPP_LANG")  # optional (e.g., "en", "hi")
 
