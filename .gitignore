@@ -1,1 +1,20 @@
 data
+.env
+backend/.env
+
+# Already have: data, .env, backend/.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Local DB and instance data
+backend/instance/
+*.sqlite
+
+# OS
+.DS_Store

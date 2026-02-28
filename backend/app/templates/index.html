@@ -48,7 +48,9 @@
               <select id="projectSelect"></select>
               <button id="refreshProjectsBtn">Refresh</button>
               <button id="useProjectBtn" class="primary">Use this project</button>
+              <button id="deleteProjectBtn" class="danger-outline">Delete project</button>
             </div>
+            <label class="row small" style="margin-top:8px"><input type="checkbox" id="showArchivedToggle" /> Show archived projects</label>
             <div id="projectStatus" class="status"></div>
           </div>
 
@@ -118,6 +120,7 @@
             <p class="subtitle">
               Selected project: <b id="intelProjectLabel">—</b>
             </p>
+            <p id="projectDescription" class="subtitle muted" style="margin-top:4px;display:none"></p>
           </div>
 
           <div class="grid-2">
@@ -126,7 +129,14 @@
                 <h2>Meetings (history)</h2>
                 <button id="loadHistoryBtn" class="primary">Refresh</button>
               </div>
+              <div class="row small" style="flex-wrap:wrap;gap:8px;margin-bottom:8px">
+                <input id="meetingSearchQ" placeholder="Search meetings…" style="max-width:160px" />
+                <input id="meetingFilterFrom" type="date" title="From" />
+                <input id="meetingFilterTo" type="date" title="To" />
+                <select id="meetingFilterStatus"><option value="">All statuses</option><option value="processed">Processed</option><option value="created">Created</option><option value="failed">Failed</option></select>
+              </div>
               <div id="meetingsList" class="list"></div>
+              <div id="meetingsEmpty" class="muted" style="display:none">No meetings yet. Record your first meeting.</div>
               <div class="status muted">Click a meeting to view minutes.</div>
             </div>
 
@@ -135,7 +145,11 @@
               <div class="row" style="margin-top: -6px">
                 <button id="exportJsonBtn">Export JSON</button>
                 <button id="printBtn">Print / Save PDF</button>
+                <button id="downloadPdfBtn">Download PDF</button>
+                <input id="emailSummaryTo" placeholder="Email to" style="width:140px" />
+                <button id="emailSummaryBtn">Email summary</button>
               </div>
+              <div class="row small" style="margin-top:8px">Meeting notes: <textarea id="meetingNotesInput" placeholder="Optional notes…" rows="2" style="width:100%;max-width:360px"></textarea> <button id="saveMeetingNotesBtn" class="primary">Save notes</button></div>
               <div id="latestMinutes" class="pre"></div>
             </div>
           </div>
@@ -175,6 +189,7 @@
             <div class="card">
               <div class="row between">
                 <h2>Pending action items (carry-forward)</h2>
+                <button id="bulkCompleteBtn" class="primary" disabled>Mark selected completed</button>
                 <label class="row small">
                   <input type="checkbox" id="showCompletedToggle" />
                   Show completed
@@ -200,6 +215,15 @@
               <h2>Completed action items</h2>
               <div id="completedItemsList" class="list"></div>
             </div>
+          </div>
+          <div class="card">
+            <h2>Activity log</h2>
+            <button id="loadActivityBtn">Refresh</button>
+            <div id="activityLogList" class="list muted" style="margin-top:8px;font-size:12px"></div>
+          </div>
+          <div class="card">
+            <h2>Backup</h2>
+            <a href="/api/backup" download class="primary button">Download backup</a>
           </div>
         </section>
 

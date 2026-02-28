@@ -118,19 +118,22 @@ def process_meeting(meeting_id: int):
 
             import threading
 
+            app = current_app._get_current_object()
+
             def _run_job(mid: int):
-                try:
-                    m = Meeting.query.get(mid)
-                    if m:
-                        process_meeting_pipeline(m)
-                except Exception as e:
-                    m = Meeting.query.get(mid)
-                    if m:
-                        m.status = "failed"
-                        m.processing_error = str(e)
-                        db.session.commit()
-                finally:
-                    _background_jobs.pop(mid, None)
+                with app.app_context():
+                    try:
+                        m = Meeting.query.get(mid)
+                        if m:
+                            process_meeting_pipeline(m)
+                    except Exception as e:
+                        m = Meeting.query.get(mid)
+                        if m:
+                            m.status = "failed"
+                            m.processing_error = str(e)
+                            db.session.commit()
+                    finally:
+                        _background_jobs.pop(mid, None)
 
             threading.Thread(target=_run_job, args=(meeting.id,), daemon=True).start()
             return {"meeting": meeting.to_dict(include_children=True), "async": True}, 202
@@ -149,6 +152,62 @@ def get_meeting(meeting_id: int):
     meeting = Meeting.query.get_or_404(meeting_id)
     return {"meeting": meeting.to_dict(include_children=True)}
 
+@bp.patch("/meetings/<int:meeting_id>")
+def update_meeting(meeting_id: int):
+    meeting = Meeting.query.get_or_404(meeting_id)
+    payload = request.get_json(force=True, silent=True) or {}
+    if "notes" in payload:
+        meeting.notes = (payload.get("notes") or "").strip() or None
+    if "title" in payload:
+        meeting.title = (payload.get("title") or "").strip() or None
+    db.session.commit()
+    return {"meeting": meeting.to_dict(include_children=True)}
+
+
+@bp.post("/meetings/<int:meeting_id>/duplicate")
+def duplicate_meeting(meeting_id: int):
+    meeting = Meeting.query.get_or_404(meeting_id)
+    new_meeting = Meeting(
+        project_id=meeting.project_id,
+        title=(meeting.title or "") + " (copy)",
+        status="created",
+    )
+    db.session.add(new_meeting)
+    db.session.flush()
+    if meeting.transcript:
+        t = meeting.transcript
+        new_t = Transcript(meeting_id=new_meeting.id, text=t.text or "", language=t.language, model_name=t.model_name, speaker_segments_json=t.speaker_segments_json)
+        db.session.add(new_t)
+    if meeting.summary:
+        s = meeting.summary
+        new_s = Summary(meeting_id=new_meeting.id, summary_text=s.summary_text or "", decisions_json=s.decisions_json, action_items_json=s.action_items_json, model_name=s.model_name)
+        db.session.add(new_s)
+    db.session.commit()
+    return {"meeting": new_meeting.to_dict(include_children=True)}, 201
+
+
+
+
+@bp.delete("/meetings/<int:meeting_id>")
+def delete_meeting(meeting_id: int):
+    meeting = Meeting.query.get_or_404(meeting_id)
+    project_id = meeting.project_id
+    for ai in ActionItem.query.filter(
+        (ActionItem.created_in_meeting_id == meeting_id)
+        | (ActionItem.resolved_in_meeting_id == meeting_id)
+        | (ActionItem.last_rementioned_meeting_id == meeting_id)
+    ):
+        if ai.created_in_meeting_id == meeting_id:
+            ai.created_in_meeting_id = None
+        if ai.resolved_in_meeting_id == meeting_id:
+            ai.resolved_in_meeting_id = None
+        if ai.last_rementioned_meeting_id == meeting_id:
+            ai.last_rementioned_meeting_id = None
+    db.session.commit()
+    db.session.delete(meeting)
+    db.session.commit()
+    return {"success": True, "message": "deleted", "project_id": project_id}
+
 
 @bp.get("/meetings/<int:meeting_id>/export")
 def export_meeting(meeting_id: int):
@@ -156,6 +215,67 @@ def export_meeting(meeting_id: int):
     Lightweight export: return full meeting object as JSON (minutes + transcript + action items).
     Use browser "Print" to generate PDF if needed.
     """
+
+@bp.get("/meetings/<int:meeting_id>/pdf")
+def meeting_pdf(meeting_id: int):
+    meeting = Meeting.query.get_or_404(meeting_id)
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.units import inch
+        import io
+        buf = io.BytesIO()
+        doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=50, leftMargin=50, topMargin=50, bottomMargin=50)
+        styles = getSampleStyleSheet()
+        story = []
+        story.append(Paragraph("Meeting Minutes", styles["Title"]))
+        story.append(Paragraph("Meeting #%s" % meeting.id, styles["Heading2"]))
+        story.append(Spacer(1, 0.2*inch))
+        if meeting.title:
+            story.append(Paragraph("Title: %s" % meeting.title.replace("<", "&lt;"), styles["Normal"]))
+        if meeting.summary:
+            story.append(Paragraph("Summary", styles["Heading2"]))
+            story.append(Paragraph((meeting.summary.summary_text or "").replace("\n", "<br/>").replace("<", "&lt;")[:5000], styles["Normal"]))
+        doc.build(story)
+        buf.seek(0)
+        from flask import send_file
+        return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name="meeting_%s.pdf" % meeting_id)
+    except ImportError:
+        return {"error": "reportlab not installed"}, 501
+
+
+@bp.post("/meetings/<int:meeting_id>/email_summary")
+def email_meeting_summary(meeting_id: int):
+    meeting = Meeting.query.get_or_404(meeting_id)
+    payload = request.get_json(force=True, silent=True) or {}
+    to_email = (payload.get("to") or "").strip()
+    if not to_email or "@" not in to_email:
+        return {"error": "valid 'to' email required"}, 400
+    import os
+    if not os.environ.get("SMTP_HOST"):
+        return {"error": "SMTP not configured (set SMTP_HOST, SMTP_USER, SMTP_PASSWORD)"}, 501
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        summary = (meeting.summary.summary_text if meeting.summary else "") or "No summary."
+        msg = MIMEMultipart()
+        msg["Subject"] = "Meeting minutes: %s" % (meeting.title or ("Meeting #%s" % meeting.id))
+        msg["From"] = os.environ.get("SMTP_FROM") or os.environ.get("SMTP_USER") or "noreply@meetingai.local"
+        msg["To"] = to_email
+        msg.attach(MIMEText(summary, "plain"))
+        s = smtplib.SMTP(os.environ.get("SMTP_HOST"), int(os.environ.get("SMTP_PORT", 587)))
+        s.starttls()
+        if os.environ.get("SMTP_USER"):
+            s.login(os.environ.get("SMTP_USER"), os.environ.get("SMTP_PASSWORD", ""))
+        s.send_message(msg)
+        s.quit()
+        return {"success": True, "message": "Email sent"}
+    except Exception as e:
+        return {"error": str(e)}, 500
+
+
     meeting = Meeting.query.get_or_404(meeting_id)
     return {"meeting": meeting.to_dict(include_children=True)}
 

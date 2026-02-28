@@ -23,6 +23,7 @@ class Project(db.Model):
     # Lightweight participant storage for manual speaker labeling (viva-friendly).
     # Stored as JSON string: ["Alice", "Bob", ...]
     participants_json = db.Column(db.Text, nullable=True)
+    archived = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
     meetings = db.relationship("Meeting", back_populates="project", cascade="all, delete-orphan")
@@ -43,6 +44,7 @@ class Project(db.Model):
             "description": self.description,
             "participants_json": self.participants_json,
             "participants": participants,
+            "archived": getattr(self, "archived", False),
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -62,6 +64,8 @@ class Meeting(db.Model):
     started_at = db.Column(db.DateTime, nullable=True)
     ended_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    notes = db.Column(db.Text, nullable=True)
 
     # File system path (prototype). In production you'd likely use object storage.
     audio_path = db.Column(db.Text, nullable=True)
@@ -86,6 +90,7 @@ class Meeting(db.Model):
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "ended_at": self.ended_at.isoformat() if self.ended_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "notes": getattr(self, "notes", None),
             "audio_path": self.audio_path,
             "status": self.status,
             "processing_error": self.processing_error,
@@ -206,6 +211,8 @@ class ActionItem(db.Model):
 
     created_in_meeting_id = db.Column(db.Integer, db.ForeignKey("meetings.id"), nullable=True, index=True)
     resolved_in_meeting_id = db.Column(db.Integer, db.ForeignKey("meetings.id"), nullable=True, index=True)
+    # When the same task is committed to again in a later meeting (not done on time)
+    last_rementioned_meeting_id = db.Column(db.Integer, db.ForeignKey("meetings.id"), nullable=True, index=True)
 
     who = db.Column(db.String(200), nullable=True)
     will_do = db.Column(db.String(200), nullable=True)
@@ -224,6 +231,7 @@ class ActionItem(db.Model):
             "project_id": self.project_id,
             "created_in_meeting_id": self.created_in_meeting_id,
             "resolved_in_meeting_id": self.resolved_in_meeting_id,
+            "last_rementioned_meeting_id": self.last_rementioned_meeting_id,
             "who": self.who,
             "will_do": self.will_do,
             "what": self.what,
@@ -231,5 +239,29 @@ class ActionItem(db.Model):
             "status": self.status,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class ActivityLog(db.Model):
+    """Optional audit log: meeting processed, action item completed, project created, etc."""
+    __tablename__ = "activity_logs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("projects.id"), nullable=True, index=True)
+    meeting_id = db.Column(db.Integer, db.ForeignKey("meetings.id"), nullable=True, index=True)
+    action_item_id = db.Column(db.Integer, db.ForeignKey("action_items.id"), nullable=True, index=True)
+    action = db.Column(db.String(120), nullable=False)  # e.g. "meeting_processed", "action_completed"
+    details = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "project_id": self.project_id,
+            "meeting_id": self.meeting_id,
+            "action_item_id": self.action_item_id,
+            "action": self.action,
+            "details": self.details,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 

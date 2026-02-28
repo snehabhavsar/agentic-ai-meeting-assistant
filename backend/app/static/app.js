@@ -132,6 +132,9 @@ function renderPending(items) {
   for (const ai of items) {
     const el = document.createElement("div");
     el.className = "item";
+    const rementionedTag = ai.last_rementioned_meeting_id
+      ? `<span class="tag carry-forward" title="Re-committed in a later meeting (not done on time)">re-mentioned in meeting ${ai.last_rementioned_meeting_id}</span>`
+      : "";
     el.innerHTML = `
       <div>
         <div class="item-title">${escapeHtml(fmtActionItem(ai))}</div>
@@ -139,10 +142,12 @@ function renderPending(items) {
           <span class="tag">id=${ai.id}</span>
           <span class="tag">status=${escapeHtml(ai.status)}</span>
           ${ai.created_in_meeting_id ? `<span class="tag">created_in_meeting=${ai.created_in_meeting_id}</span>` : ""}
+          ${rementionedTag}
         </div>
       </div>
       <div class="item-actions">
         <button data-ai="${ai.id}" class="primary">Mark completed</button>
+        <button data-ai-delete="${ai.id}" class="danger-outline" title="Delete">Delete</button>
       </div>
     `;
     const btn = el.querySelector("button");
@@ -160,6 +165,21 @@ function renderPending(items) {
         btn.disabled = false;
       }
     });
+    const delBtn = el.querySelector("button[data-ai-delete]");
+    if (delBtn) {
+      delBtn.addEventListener("click", async () => {
+        if (!confirm("Delete this action item?")) return;
+        delBtn.disabled = true;
+        try {
+          await api(`/api/action_items/${ai.id}`, { method: "DELETE" });
+          await loadHistory();
+        } catch (e) {
+          $("meetingStatus").textContent = `Error: ${e.message}`;
+        } finally {
+          delBtn.disabled = false;
+        }
+      });
+    }
     root.appendChild(el);
   }
 }
@@ -186,9 +206,10 @@ function renderCompleted(items) {
       </div>
       <div class="item-actions">
         <button data-ai="${ai.id}">Re-open</button>
+        <button data-ai-delete="${ai.id}" class="danger-outline">Delete</button>
       </div>
     `;
-    const btn = el.querySelector("button");
+    const btn = el.querySelector("button[data-ai]");
     btn.addEventListener("click", async () => {
       btn.disabled = true;
       try {
@@ -203,6 +224,21 @@ function renderCompleted(items) {
         btn.disabled = false;
       }
     });
+    const delBtn = el.querySelector("button[data-ai-delete]");
+    if (delBtn) {
+      delBtn.addEventListener("click", async () => {
+        if (!confirm("Delete this action item?")) return;
+        delBtn.disabled = true;
+        try {
+          await api(`/api/action_items/${ai.id}`, { method: "DELETE" });
+          await loadHistory();
+        } catch (e) {
+          $("meetingStatus").textContent = `Error: ${e.message}`;
+        } finally {
+          delBtn.disabled = false;
+        }
+      });
+    }
     root.appendChild(el);
   }
 }
@@ -215,6 +251,8 @@ function renderMinutes(meeting) {
   }
 
   state.currentMeeting = meeting;
+  const notesEl = $("meetingNotesInput");
+  if (notesEl) notesEl.value = meeting.notes || "";
 
   const summary = meeting.summary || null;
   const transcript = meeting.transcript || null;
@@ -243,8 +281,21 @@ function renderMinutes(meeting) {
       <h4>Action items extracted (this meeting)</h4>
       ${
         extracted && extracted.length
-          ? `<ul>${extracted.map((ai) => `<li>${escapeHtml(fmtActionItem(ai))}</li>`).join("")}</ul>`
+          ? `<ul>${extracted.map((ai) => {
+              const carryNote = ai.rementioned_in_meeting_id || ai.deduped ? ' <span class="muted">(carry-forward; not done on time)</span>' : '';
+              return `<li>${escapeHtml(fmtActionItem(ai))}${carryNote}</li>`;
+            }).join("")}</ul>`
           : `<div class="muted">No action items extracted.</div>`
+      }
+
+      ${
+        transcript?.speaker_segments && transcript.speaker_segments.length
+          ? `<h4>Transcript (by speaker)</h4><div class="transcript-by-speaker">${transcript.speaker_segments.map((seg) => {
+              const speaker = seg.speaker ? escapeHtml(seg.speaker) : "(Unassigned)";
+              const text = escapeHtml(seg.text || "").trim();
+              return text ? `<p class="seg"><strong>${speaker}:</strong> ${text}</p>` : "";
+            }).filter(Boolean).join("")}</div>`
+          : ""
       }
 
       <h4>Transcript (debug)</h4>
@@ -276,7 +327,8 @@ async function api(path, options = {}) {
 }
 
 async function refreshProjects() {
-  const payload = await api("/api/projects", { method: "GET" });
+  const showArchived = $("showArchivedToggle")?.checked ? "1" : "0";
+  const payload = await api(`/api/projects?archived=${showArchived}`, { method: "GET" });
   state.projects = payload.projects || [];
 
   const sel = $("projectSelect");
@@ -558,13 +610,31 @@ async function stopRecording() {
 
 async function loadHistory() {
   if (!state.selectedProjectId) throw new Error("Select a project");
-  const payload = await api(`/api/projects/${state.selectedProjectId}/history`, { method: "GET" });
+  const q = $("meetingSearchQ")?.value?.trim() || "";
+  const from = $("meetingFilterFrom")?.value || "";
+  const to = $("meetingFilterTo")?.value || "";
+  const status = $("meetingFilterStatus")?.value || "";
+  let url = `/api/projects/${state.selectedProjectId}/history`;
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  if (status) params.set("status", status);
+  if (params.toString()) url += "?" + params.toString();
+  const payload = await api(url, { method: "GET" });
+  const descEl = $("projectDescription");
+  if (descEl && payload.project?.description) { descEl.textContent = payload.project.description; descEl.style.display = "block"; }
+  else if (descEl) { descEl.textContent = ""; descEl.style.display = "none"; }
+
   renderPending(payload.pending_action_items || []);
   if (payload.meetings && payload.meetings.length) {
     renderMinutes(payload.meetings[0]);
   }
 
-  renderMeetingsList(payload.meetings || []);
+  const meetings = payload.meetings || [];
+  renderMeetingsList(meetings);
+  const emptyEl = $("meetingsEmpty");
+  if (emptyEl) { emptyEl.style.display = meetings.length ? "none" : "block"; }
   await loadParticipants();
 
   // Completed items are fetched on-demand to keep /history lean.
@@ -620,10 +690,12 @@ function renderMeetingsList(meetings) {
         </div>
       </div>
       <div class="item-actions">
-        <button class="primary">Open</button>
+        <button data-open class="primary">Open</button>
+        <button data-duplicate-meeting="${m.id}">Duplicate</button>
+        <button data-delete-meeting="${m.id}" class="danger-outline">Delete</button>
       </div>
     `;
-    el.querySelector("button").addEventListener("click", async () => {
+    el.querySelector("button[data-open]").addEventListener("click", async () => {
       try {
         const payload = await api(`/api/meetings/${m.id}`, { method: "GET" });
         state.meetingId = payload.meeting.id;
@@ -632,6 +704,21 @@ function renderMeetingsList(meetings) {
         $("meetingStatus").textContent = `Error: ${e.message}`;
       }
     });
+    const delMeetingBtn = el.querySelector("button[data-delete-meeting]");
+    if (delMeetingBtn) {
+      delMeetingBtn.addEventListener("click", async () => {
+        if (!confirm("Delete this meeting and its minutes? Action items will be kept.")) return;
+        delMeetingBtn.disabled = true;
+        try {
+          await api(`/api/meetings/${m.id}`, { method: "DELETE" });
+          await loadHistory();
+        } catch (e) {
+          $("meetingStatus").textContent = `Error: ${e.message}`;
+        } finally {
+          delMeetingBtn.disabled = false;
+        }
+      });
+    }
     root.appendChild(el);
   }
 }
@@ -663,6 +750,26 @@ function wire() {
     persistSelectedProject();
     updateSelectedProjectLabels();
     showView("record");
+  });
+
+  $("deleteProjectBtn").addEventListener("click", async () => {
+    if (!state.selectedProjectId) {
+      $("projectStatus").textContent = "Select a project first.";
+      return;
+    }
+    const p = state.projects.find((x) => x.id === state.selectedProjectId);
+    if (!confirm(`Delete project "${p?.name || state.selectedProjectId}"? All meetings and action items in it will be removed.`)) return;
+    try {
+      await api(`/api/projects/${state.selectedProjectId}`, { method: "DELETE" });
+      state.selectedProjectId = null;
+      state.selectedProjectName = null;
+      persistSelectedProject();
+      updateSelectedProjectLabels();
+      await refreshProjects();
+      $("projectStatus").textContent = "Project deleted.";
+    } catch (e) {
+      $("projectStatus").textContent = `Error: ${e.message}`;
+    }
   });
 
   $("createProjectBtn").addEventListener("click", async () => {

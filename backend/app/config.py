@@ -38,3 +38,7 @@ class Config:
     WHISPER_CPP_MODEL = os.environ.get("WHISPER_CPP_MODEL")  # required to enable whisper.cpp ASR
     WHISPER_CPP_LANG = os.environ.get("WHISPER_CPP_LANG")  # optional (e.g., "en", "hi")
 
+    # Optional: Deepgram (cloud ASR) + Gemini (cloud summarization), like SMART_MEET_AI reference
+    DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY")
+    DEEPGRAM_LANG = os.environ.get("DEEPGRAM_LANG", "en")
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")

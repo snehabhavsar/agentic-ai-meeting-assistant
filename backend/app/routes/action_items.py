@@ -90,5 +90,43 @@ def update_action_item(action_item_id: int):
             ai.resolved_in_meeting_id = payload["resolved_in_meeting_id"]
 
     db.session.commit()
+    if ai.status == "completed":
+        try:
+            from ..activity import log_activity
+            log_activity(project_id=ai.project_id, action_item_id=ai.id, action="action_completed")
+        except Exception:
+            pass
     return {"action_item": ai.to_dict()}
+
+
+@bp.delete("/action_items/<int:action_item_id>")
+def delete_action_item(action_item_id: int):
+    ai = ActionItem.query.get_or_404(action_item_id)
+    project_id = ai.project_id
+    db.session.delete(ai)
+    db.session.commit()
+    return {"success": True, "message": "deleted", "project_id": project_id}
+
+
+@bp.post("/action_items/bulk_complete")
+def bulk_complete_action_items():
+    payload = request.get_json(force=True, silent=True) or {}
+    ids = payload.get("action_item_ids") or []
+    resolved_in_meeting_id = payload.get("resolved_in_meeting_id")
+    if not isinstance(ids, list):
+        return {"error": "action_item_ids must be a list"}, 400
+    if resolved_in_meeting_id is not None:
+        Meeting.query.get_or_404(resolved_in_meeting_id)
+    items = ActionItem.query.filter(ActionItem.id.in_(ids), ActionItem.status == "pending").all()
+    for ai in items:
+        ai.status = "completed"
+        ai.resolved_in_meeting_id = resolved_in_meeting_id
+    db.session.commit()
+    try:
+        from ..activity import log_activity
+        for ai in items:
+            log_activity(project_id=ai.project_id, action_item_id=ai.id, action="action_completed")
+    except Exception:
+        pass
+    return {"updated": len(items), "action_items": [ai.to_dict() for ai in items]}
 

@@ -19,7 +19,7 @@ Web-based system to record meetings (via browser mic), store them under projects
 
 - Simple web UI served by Flask (`/`) to record from laptop mic and run post-meeting processing
 - Project-based context memory: previous summaries + pending action items are pulled during processing
-- Optional lightweight ASR (ffmpeg + whisper.cpp) with safe fallbacks if not installed
+- Optional lightweight ASR (ffmpeg + whisper.cpp) with safe fallbacks if not installed. For real output without local ML, set DEEPGRAM_API_KEY and GEMINI_API_KEY (see below).
 
 ## Quickstart (backend)
 
@@ -51,6 +51,8 @@ python run.py
 ```
 
 API runs at `http://127.0.0.1:5000`.
+
+**Optional (recommended for real output):** Set `DEEPGRAM_API_KEY` and `GEMINI_API_KEY` so transcription and summarization use Deepgram + Gemini (project context is still applied from previous meetings). Get keys from https://console.deepgram.com and https://makersuite.google.com/app/apikey.
 
 ### 3) Use the UI
 

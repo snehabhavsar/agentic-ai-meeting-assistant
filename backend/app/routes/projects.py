@@ -1,4 +1,5 @@
 from flask import Blueprint, request
+from sqlalchemy import or_
 
 from ..db import db
 from ..models import Project, Meeting, ActionItem
@@ -24,30 +25,83 @@ def create_project():
     db.session.add(project)
     db.session.commit()
 
+    try:
+        from ..activity import log_activity
+        log_activity(project_id=project.id, action="project_created", details=name)
+    except Exception:
+        pass
+
     return {"project": project.to_dict()}, 201
 
 
 @bp.get("/projects")
 def list_projects():
-    projects = Project.query.order_by(Project.created_at.desc()).all()
+    show_archived = request.args.get("archived", "0").strip() == "1"
+    q = Project.query.order_by(Project.created_at.desc())
+    if not show_archived:
+        q = q.filter(or_(Project.archived == False, Project.archived == None))
+    projects = q.all()
     return {"projects": [p.to_dict() for p in projects]}
+
+
+@bp.delete("/projects/<int:project_id>")
+def delete_project(project_id: int):
+    """Delete a project and all its meetings, action items, etc. (cascade)."""
+    project = Project.query.get_or_404(project_id)
+    db.session.delete(project)
+    db.session.commit()
+    return {"success": True, "message": "deleted"}
+
+
+@bp.patch("/projects/<int:project_id>")
+def update_project(project_id: int):
+    project = Project.query.get_or_404(project_id)
+    payload = request.get_json(force=True, silent=True) or {}
+    if "archived" in payload:
+        project.archived = bool(payload["archived"])
+    if "description" in payload:
+        project.description = (payload.get("description") or "").strip() or None
+    db.session.commit()
+    return {"project": project.to_dict()}
 
 
 @bp.get("/projects/<int:project_id>/history")
 def project_history(project_id: int):
-    """
-    Returns:
-    - recent meetings (with transcript+summary if present)
-    - currently pending action items (project memory)
-    """
     project = Project.query.get_or_404(project_id)
 
-    meetings = (
-        Meeting.query.filter_by(project_id=project_id)
-        .order_by(Meeting.created_at.desc())
-        .limit(50)
-        .all()
-    )
+    q_meetings = Meeting.query.filter_by(project_id=project_id).order_by(Meeting.created_at.desc())
+    from_param = request.args.get("from", "").strip()
+    to_param = request.args.get("to", "").strip()
+    status_param = request.args.get("status", "").strip()
+    search_q = request.args.get("q", "").strip()
+
+    if from_param:
+        try:
+            from datetime import datetime
+            q_meetings = q_meetings.filter(Meeting.created_at >= datetime.fromisoformat(from_param.replace("Z", "+00:00")))
+        except Exception:
+            pass
+    if to_param:
+        try:
+            from datetime import datetime
+            q_meetings = q_meetings.filter(Meeting.created_at <= datetime.fromisoformat(to_param.replace("Z", "+00:00")))
+        except Exception:
+            pass
+    if status_param:
+        q_meetings = q_meetings.filter(Meeting.status == status_param)
+
+    meetings = q_meetings.limit(50).all()
+
+    if search_q:
+        search_lower = search_q.lower()
+        filtered = []
+        for m in meetings:
+            if search_lower in (m.title or "").lower():
+                filtered.append(m)
+                continue
+            if m.transcript and search_lower in (m.transcript.text or "").lower():
+                filtered.append(m)
+        meetings = filtered
 
     pending_items = (
         ActionItem.query.filter_by(project_id=project_id, status="pending")

@@ -5,10 +5,15 @@ import os
 
 from ..db import db
 from ..models import ActionItem, Meeting, Summary, Transcript
-from .action_extractor import extract_decisions_and_actions
 from ..config import Config
+from .action_extractor import extract_decisions_and_actions
+from .asr_deepgram import transcribe_with_deepgram
 from .asr_whispercpp import transcribe_with_whispercpp
-from .summarizer import fallback_summary, summarize_with_transformers
+from .summarizer import (
+    fallback_summary,
+    summarize_with_gemini,
+    summarize_with_transformers,
+)
 
 
 def _norm(s: str | None) -> str:
@@ -43,6 +48,43 @@ def _split_into_segments(transcript_text: str) -> list[dict]:
     for i, seg_text in enumerate(parts, start=1):
         segments.append({"idx": i, "speaker": None, "text": seg_text})
     return segments
+
+
+def _mark_reported_completed(meeting: Meeting, reported_list: list[dict]) -> int:
+    """Mark pending items as completed when Gemini says they were reported done in the transcript."""
+    if not reported_list:
+        return 0
+    pending = (
+        ActionItem.query.filter_by(project_id=meeting.project_id, status="pending")
+        .order_by(ActionItem.created_at.asc())
+        .all()
+    )
+    count = 0
+    for r in reported_list:
+        who = (r.get("who") or "").strip() or None
+        what = (r.get("what") or "").strip()
+        if not what:
+            continue
+        r_who_norm = _norm(who)
+        r_what_norm = _norm(what)
+        for ai in pending:
+            if ai.status != "pending":
+                continue
+            ai_who_norm = _norm(ai.who)
+            ai_what_norm = _norm(ai.what)
+            who_ok = r_who_norm == ai_who_norm or (not r_who_norm and not ai_who_norm)
+            what_ok = (
+                ai_what_norm == r_what_norm
+                or (r_what_norm in ai_what_norm)
+                or (ai_what_norm in r_what_norm)
+            )
+            if who_ok and what_ok:
+                ai.status = "completed"
+                ai.resolved_in_meeting_id = meeting.id
+                count += 1
+                pending = [x for x in pending if x.id != ai.id]
+                break
+    return count
 
 
 def _auto_resolve_action_items_from_transcript(meeting: Meeting, transcript_text: str) -> int:
@@ -105,7 +147,7 @@ def build_context_for_project(project_id: int, max_meetings: int = 5) -> str:
             parts.append(f"- Summary {i}: {s.summary_text}")
 
     if pending_items:
-        parts.append("\nPENDING ACTION ITEMS (carry-forward):")
+        parts.append("\nPENDING ACTION ITEMS (carry-forward; if someone commits again to the same task in this meeting, they did not complete it on time):")
         for ai in pending_items:
             due = ai.by_when.isoformat() if ai.by_when else "N/A"
             who = ai.who or "Unassigned"
@@ -138,36 +180,64 @@ def process_meeting(meeting: Meeting) -> Meeting:
     db.session.commit()
 
     # --- ASR ---
-    try:
-        # Prefer lightweight whisper.cpp if configured.
-        def _asr_progress(done, total):
-            # Scale ASR step to 0..80%.
-            pct = int((done / max(total, 1)) * 80)
+    transcript_text = None
+    transcript_model = "stub"
+    transcript_lang = None
+
+    # 1) Try Deepgram if API key is set (reliable cloud transcription like SMART_MEET_AI)
+    deepgram_key = os.environ.get("DEEPGRAM_API_KEY") or getattr(Config, "DEEPGRAM_API_KEY", None)
+    if deepgram_key and deepgram_key != "YOUR_DEEPGRAM_API_KEY_HERE":
+        try:
+            def _asr_progress(done, total):
+                pct = int((done / max(total, 1)) * 80)
+                meeting.processing_stage = "asr"
+                meeting.processing_progress = pct
+                db.session.commit()
+
             meeting.processing_stage = "asr"
-            meeting.processing_progress = pct
+            meeting.processing_progress = 5
             db.session.commit()
 
-        asr = transcribe_with_whispercpp(
-            meeting.audio_path,
-            artifacts_dir=Config.ARTIFACTS_DIR,
-            output_basename=f"project_{meeting.project_id}_meeting_{meeting.id}",
-            model_path=os.environ.get("WHISPER_CPP_MODEL") or Config.WHISPER_CPP_MODEL,
-            bin_path=os.environ.get("WHISPER_CPP_BIN") or Config.WHISPER_CPP_BIN,
-            language=os.environ.get("WHISPER_CPP_LANG") or Config.WHISPER_CPP_LANG,
-            chunk_seconds=300,
-            progress_cb=_asr_progress,
-        )
-        transcript_text = asr.text
-        transcript_model = asr.model_name
-        transcript_lang = asr.language
-    except Exception:
-        # Keep runnable even without ASR installed.
-        transcript_text = (
-            "ASR disabled (install ffmpeg + whisper.cpp and set WHISPER_CPP_MODEL to enable ASR).\n"
-            "This placeholder transcript keeps the pipeline demo-able."
-        )
-        transcript_model = "stub"
-        transcript_lang = None
+            asr = transcribe_with_deepgram(
+                meeting.audio_path,
+                api_key=deepgram_key,
+                language=os.environ.get("DEEPGRAM_LANG", "en"),
+            )
+            transcript_text = asr.text
+            transcript_model = asr.model_name
+            transcript_lang = asr.language
+        except Exception:
+            pass  # fall through to whisper or stub
+
+    # 2) Try whisper.cpp if Deepgram not used and model is configured
+    if transcript_text is None:
+        try:
+            def _asr_progress(done, total):
+                pct = int((done / max(total, 1)) * 80)
+                meeting.processing_stage = "asr"
+                meeting.processing_progress = pct
+                db.session.commit()
+
+            asr = transcribe_with_whispercpp(
+                meeting.audio_path,
+                artifacts_dir=Config.ARTIFACTS_DIR,
+                output_basename=f"project_{meeting.project_id}_meeting_{meeting.id}",
+                model_path=os.environ.get("WHISPER_CPP_MODEL") or Config.WHISPER_CPP_MODEL,
+                bin_path=os.environ.get("WHISPER_CPP_BIN") or Config.WHISPER_CPP_BIN,
+                language=os.environ.get("WHISPER_CPP_LANG") or Config.WHISPER_CPP_LANG,
+                chunk_seconds=300,
+                progress_cb=_asr_progress,
+            )
+            transcript_text = asr.text
+            transcript_model = asr.model_name
+            transcript_lang = asr.language
+        except Exception:
+            transcript_text = (
+                "ASR disabled (set DEEPGRAM_API_KEY for cloud transcription, or install ffmpeg + whisper.cpp). "
+                "This placeholder keeps the pipeline demo-able."
+            )
+            transcript_model = "stub"
+            transcript_lang = None
 
     transcript = Transcript.query.filter_by(meeting_id=meeting.id).first()
     if transcript:
@@ -191,10 +261,10 @@ def process_meeting(meeting: Meeting) -> Meeting:
         except Exception:
             transcript.speaker_segments_json = None
 
-    # --- Context memory (project-based) ---
+    # --- Context memory (project-based): previous summaries + pending action items ---
     context_text = build_context_for_project(meeting.project_id)
 
-    # --- Summarization ---
+    # --- Summarization (Gemini first with context, then BART/fallback) ---
     meeting.processing_stage = "summary"
     meeting.processing_progress = max(meeting.processing_progress or 0, 85)
     db.session.commit()
@@ -207,62 +277,119 @@ def process_meeting(meeting: Meeting) -> Meeting:
         ]
     )
 
-    try:
-        summ = summarize_with_transformers(summarization_input)
-    except Exception:
-        summ = fallback_summary(summarization_input)
+    use_gemini_decisions_and_actions = False
+    extraction = extract_decisions_and_actions(transcript_text)  # default rule-based
+    summ = None
 
-    # --- Extraction ---
+    gemini_key = os.environ.get("GEMINI_API_KEY") or getattr(Config, "GEMINI_API_KEY", None)
+    if gemini_key and gemini_key != "YOUR_GEMINI_API_KEY_HERE":
+        try:
+            summ = summarize_with_gemini(context_text=context_text, transcript=transcript_text, api_key=gemini_key)
+            use_gemini_decisions_and_actions = True
+        except Exception:
+            pass
+
+    if summ is None:
+        try:
+            summ = summarize_with_transformers(summarization_input)
+        except Exception:
+            summ = fallback_summary(summarization_input)
+
+    # --- Extraction: use Gemini's structured output if available, else rule-based ---
     meeting.processing_stage = "extract"
     meeting.processing_progress = 92
     db.session.commit()
 
-    extraction = extract_decisions_and_actions(transcript_text)
-
-    # --- Auto-resolve previous action items if transcript explicitly closes them ---
     _auto_resolve_action_items_from_transcript(meeting, transcript_text)
 
-    # Persist action items extracted in this meeting (project-scoped) with lightweight dedup.
     existing_pending = (
         ActionItem.query.filter_by(project_id=meeting.project_id, status="pending")
         .order_by(ActionItem.created_at.asc())
         .all()
     )
     existing_keys = {(_norm(ai.who), _norm(ai.what)) for ai in existing_pending}
+    existing_by_key = {(_norm(ai.who), _norm(ai.what)): ai for ai in existing_pending}
 
     extracted_items_payload: list[dict] = []
-    for item in extraction.action_items:
-        key = (_norm(item.who), _norm(item.what))
-        if key in existing_keys:
-            extracted_items_payload.append(
-                {
-                    "who": item.who,
-                    "will_do": item.will_do,
-                    "what": item.what,
-                    "by_when": item.by_when.isoformat() if item.by_when else None,
-                    "deduped": True,
-                }
-            )
-            continue
+    decisions_for_json = extraction.decisions
 
-        ai = ActionItem(
-            project_id=meeting.project_id,
-            created_in_meeting_id=meeting.id,
-            who=item.who,
-            will_do=item.will_do,
-            what=item.what,
-            by_when=item.by_when,
-            status="pending",
-        )
-        db.session.add(ai)
-        existing_keys.add(key)
-        extracted_items_payload.append(
-            {"who": item.who, "will_do": item.will_do, "what": item.what, "by_when": item.by_when.isoformat() if item.by_when else None}
-        )
+    if use_gemini_decisions_and_actions and hasattr(summ, "decisions") and hasattr(summ, "action_items"):
+        decisions_for_json = summ.decisions
+        for item in summ.action_items:
+            who = item.get("who")
+            will_do = item.get("will_do") or "do"
+            what = (item.get("what") or "").strip()
+            by_when = item.get("by_when")  # may be date or None
+            if not what:
+                continue
+            key = (_norm(who), _norm(what))
+            if key in existing_keys:
+                existing_ai = existing_by_key.get(key)
+                if existing_ai:
+                    existing_ai.last_rementioned_meeting_id = meeting.id
+                extracted_items_payload.append({
+                    "who": who,
+                    "will_do": will_do,
+                    "what": what,
+                    "by_when": by_when.isoformat() if hasattr(by_when, "isoformat") else by_when,
+                    "deduped": True,
+                    "rementioned_in_meeting_id": meeting.id,
+                })
+                continue
+            ai = ActionItem(
+                project_id=meeting.project_id,
+                created_in_meeting_id=meeting.id,
+                who=who,
+                will_do=will_do,
+                what=what,
+                by_when=by_when if hasattr(by_when, "isoformat") else None,
+                status="pending",
+            )
+            db.session.add(ai)
+            existing_keys.add(key)
+            extracted_items_payload.append({
+                "who": who,
+                "will_do": will_do,
+                "what": what,
+                "by_when": by_when.isoformat() if hasattr(by_when, "isoformat") else by_when,
+            })
+    else:
+        for item in extraction.action_items:
+            key = (_norm(item.who), _norm(item.what))
+            if key in existing_keys:
+                existing_ai = existing_by_key.get(key)
+                if existing_ai:
+                    existing_ai.last_rementioned_meeting_id = meeting.id
+                extracted_items_payload.append(
+                    {
+                        "who": item.who,
+                        "will_do": item.will_do,
+                        "what": item.what,
+                        "by_when": item.by_when.isoformat() if item.by_when else None,
+                        "deduped": True,
+                        "rementioned_in_meeting_id": meeting.id,
+                    }
+                )
+                continue
+
+            ai = ActionItem(
+                project_id=meeting.project_id,
+                created_in_meeting_id=meeting.id,
+                who=item.who,
+                will_do=item.will_do,
+                what=item.what,
+                by_when=item.by_when,
+                status="pending",
+            )
+            db.session.add(ai)
+            existing_keys.add(key)
+            extracted_items_payload.append(
+                {"who": item.who, "will_do": item.will_do, "what": item.what, "by_when": item.by_when.isoformat() if item.by_when else None}
+            )
 
     # --- Summary persistence ---
     summary = Summary.query.filter_by(meeting_id=meeting.id).first()
-    decisions_json = json.dumps(extraction.decisions)
+    decisions_json = json.dumps(decisions_for_json)
     action_items_json = json.dumps(extracted_items_payload)
 
     if summary:
@@ -286,5 +413,10 @@ def process_meeting(meeting: Meeting) -> Meeting:
     meeting.processing_finished_at = datetime.utcnow()
     meeting.processing_error = None
     db.session.commit()
+    try:
+        from ..activity import log_activity
+        log_activity(project_id=meeting.project_id, meeting_id=meeting.id, action="meeting_processed")
+    except Exception:
+        pass
     return meeting
 

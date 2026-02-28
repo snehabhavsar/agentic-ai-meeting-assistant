@@ -65,11 +65,13 @@ def create_app(config_object: type[Config] | None = None) -> Flask:
     from .routes.projects import bp as projects_bp
     from .routes.meetings import bp as meetings_bp
     from .routes.action_items import bp as action_items_bp
+    from .routes.misc import bp as misc_bp
 
     app.register_blueprint(ui_bp)
     app.register_blueprint(projects_bp, url_prefix="/api")
     app.register_blueprint(meetings_bp, url_prefix="/api")
     app.register_blueprint(action_items_bp, url_prefix="/api")
+    app.register_blueprint(misc_bp, url_prefix="/api")
 
     # Create tables automatically for prototype usage.
     # In later phases, we can add Flask-Migrate for migrations.
@@ -103,6 +105,24 @@ def create_app(config_object: type[Config] | None = None) -> Flask:
                 db.session.execute(text("ALTER TABLE meetings ADD COLUMN processing_started_at DATETIME"))
             if "processing_finished_at" not in col_names:
                 db.session.execute(text("ALTER TABLE meetings ADD COLUMN processing_finished_at DATETIME"))
+
+            # action_items.last_rementioned_meeting_id (carry-forward / not done on time)
+            cols = db.session.execute(text("PRAGMA table_info(action_items)")).fetchall()
+            col_names = {c[1] for c in cols}
+            if "last_rementioned_meeting_id" not in col_names:
+                db.session.execute(text("ALTER TABLE action_items ADD COLUMN last_rementioned_meeting_id INTEGER"))
+
+            # projects.archived
+            cols = db.session.execute(text("PRAGMA table_info(projects)")).fetchall()
+            col_names = {c[1] for c in cols}
+            if "archived" not in col_names:
+                db.session.execute(text("ALTER TABLE projects ADD COLUMN archived INTEGER DEFAULT 0"))
+
+            # meetings.notes
+            cols = db.session.execute(text("PRAGMA table_info(meetings)")).fetchall()
+            col_names = {c[1] for c in cols}
+            if "notes" not in col_names:
+                db.session.execute(text("ALTER TABLE meetings ADD COLUMN notes TEXT"))
 
             db.session.commit()
 

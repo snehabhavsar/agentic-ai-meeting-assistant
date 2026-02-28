@@ -29,6 +29,25 @@ pip install -r requirements.txt >/dev/null
 echo "==> Ensuring SQLite folder exists (backend/instance)…"
 mkdir -p instance
 
+# Load API keys from .env for real transcription (Deepgram + Gemini)
+if [[ -f "$BACKEND_DIR/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$BACKEND_DIR/.env"
+  set +a
+  if [[ -n "${DEEPGRAM_API_KEY:-}" ]]; then
+    echo "==> Using .env: DEEPGRAM_API_KEY set (real transcription enabled)"
+  fi
+elif [[ -f "$ROOT_DIR/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ROOT_DIR/.env"
+  set +a
+  if [[ -n "${DEEPGRAM_API_KEY:-}" ]]; then
+    echo "==> Using .env: DEEPGRAM_API_KEY set (real transcription enabled)"
+  fi
+fi
+
 # Auto-enable whisper.cpp if model exists at the common location.
 DEFAULT_MODEL="$HOME/models/whisper/ggml-small.bin"
 if [[ -z "${WHISPER_CPP_MODEL:-}" && -f "$DEFAULT_MODEL" ]]; then
@@ -53,4 +72,8 @@ echo
 
 # Use flask runner so we can control port + disable reloader (avoids double background jobs).
 flask --app run.py run --debug --port "$PORT" --no-reload
+
+
+
+
 

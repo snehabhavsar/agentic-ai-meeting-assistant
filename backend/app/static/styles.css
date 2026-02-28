@@ -285,6 +285,15 @@ button.danger {
   color: #5a0b0b;
 }
 
+button.danger-outline {
+  border-color: rgba(220, 38, 38, 0.5);
+  background: transparent;
+  color: #b91c1c;
+}
+button.danger-outline:hover {
+  background: rgba(220, 38, 38, 0.08);
+}
+
 .divider {
   height: 1px;
   background: rgba(15, 23, 42, 0.08);
@@ -419,6 +428,12 @@ button.danger {
   background: var(--ok-soft);
 }
 
+.tag.carry-forward {
+  border-color: rgba(234, 88, 12, 0.4);
+  color: #c2410c;
+  background: rgba(234, 88, 12, 0.08);
+}
+
 .item-actions {
   display: flex;
   gap: 8px;
@@ -446,6 +461,10 @@ button.danger {
 .minutes li {
   margin: 6px 0;
 }
+
+.transcript-by-speaker { margin: 8px 0 14px; }
+.transcript-by-speaker .seg { margin: 6px 0; line-height: 1.5; }
+.transcript-by-speaker .seg strong { color: var(--muted); font-weight: 600; }
 
 .muted {
   color: var(--muted);
