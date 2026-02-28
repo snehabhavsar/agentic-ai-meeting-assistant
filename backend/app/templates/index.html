@@ -29,9 +29,6 @@
           </div>
         </div>
 
-        <div class="sidebar-footer muted">
-          Lightweight: SQLite + ffmpeg + whisper.cpp (optional)
-        </div>
       </aside>
 
       <main class="main">
@@ -50,7 +47,7 @@
               <button id="useProjectBtn" class="primary">Use this project</button>
               <button id="deleteProjectBtn" class="danger-outline">Delete project</button>
             </div>
-            <label class="row small" style="margin-top:8px"><input type="checkbox" id="showArchivedToggle" /> Show archived projects</label>
+            <label class="row row-small"><input type="checkbox" id="showArchivedToggle" /> Show archived projects</label>
             <div id="projectStatus" class="status"></div>
           </div>
 
@@ -71,8 +68,8 @@
         <section id="viewRecord" class="view" hidden>
           <div class="page-header">
             <h1>Record meeting</h1>
-            <p class="subtitle">
-              Selected project: <b id="selectedProjectLabel">—</b>
+            <p class="subtitle page-subtitle">
+              Current project: <b id="selectedProjectLabel">—</b>
             </p>
           </div>
 
@@ -92,7 +89,6 @@
             </div>
             <div class="row small">
               <span><b>Status:</b> <span id="recStatus">idle</span></span>
-              <span><b>Meeting ID:</b> <span id="meetingId">—</span></span>
             </div>
             <audio id="playback" controls class="audio" hidden></audio>
             <div id="meetingStatus" class="status"></div>
@@ -100,7 +96,7 @@
 
           <div class="card">
             <h2>Upload an existing recording</h2>
-            <p class="subtitle" style="margin-top: -6px">
+            <p class="subtitle card-subtitle">
               If you already have an audio file (.wav/.mp3/.m4a/.webm), upload it and process it under the selected
               project.
             </p>
@@ -117,10 +113,10 @@
         <section id="viewIntel" class="view" hidden>
           <div class="page-header">
             <h1>Project Intelligence</h1>
-            <p class="subtitle">
-              Selected project: <b id="intelProjectLabel">—</b>
+            <p class="subtitle page-subtitle">
+              Current project: <b id="intelProjectLabel">—</b>
             </p>
-            <p id="projectDescription" class="subtitle muted" style="margin-top:4px;display:none"></p>
+            <p id="projectDescription" class="subtitle muted project-desc-block" style="display:none"></p>
           </div>
 
           <div class="grid-2">
@@ -129,8 +125,8 @@
                 <h2>Meetings (history)</h2>
                 <button id="loadHistoryBtn" class="primary">Refresh</button>
               </div>
-              <div class="row small" style="flex-wrap:wrap;gap:8px;margin-bottom:8px">
-                <input id="meetingSearchQ" placeholder="Search meetings…" style="max-width:160px" />
+              <div class="filters-row">
+                <input id="meetingSearchQ" placeholder="Search meetings…" class="filter-search" />
                 <input id="meetingFilterFrom" type="date" title="From" />
                 <input id="meetingFilterTo" type="date" title="To" />
                 <select id="meetingFilterStatus"><option value="">All statuses</option><option value="processed">Processed</option><option value="created">Created</option><option value="failed">Failed</option></select>
@@ -142,14 +138,20 @@
 
             <div class="card">
               <h2>Meeting minutes</h2>
-              <div class="row" style="margin-top: -6px">
+              <div class="row">
                 <button id="exportJsonBtn">Export JSON</button>
                 <button id="printBtn">Print / Save PDF</button>
                 <button id="downloadPdfBtn">Download PDF</button>
-                <input id="emailSummaryTo" placeholder="Email to" style="width:140px" />
+                <input id="emailSummaryTo" placeholder="Email to" class="email-input" />
                 <button id="emailSummaryBtn">Email summary</button>
               </div>
-              <div class="row small" style="margin-top:8px">Meeting notes: <textarea id="meetingNotesInput" placeholder="Optional notes…" rows="2" style="width:100%;max-width:360px"></textarea> <button id="saveMeetingNotesBtn" class="primary">Save notes</button></div>
+              <div class="row notes-row">
+                <div class="grow notes-wrap">
+                  <label for="meetingNotesInput">Meeting notes:</label>
+                  <textarea id="meetingNotesInput" placeholder="Optional notes…" rows="2" class="notes-textarea"></textarea>
+                </div>
+                <button id="saveMeetingNotesBtn" class="primary">Save notes</button>
+              </div>
               <div id="latestMinutes" class="pre"></div>
             </div>
           </div>
@@ -219,7 +221,7 @@
           <div class="card">
             <h2>Activity log</h2>
             <button id="loadActivityBtn">Refresh</button>
-            <div id="activityLogList" class="list muted" style="margin-top:8px;font-size:12px"></div>
+            <div id="activityLogList" class="list list-muted"></div>
           </div>
           <div class="card">
             <h2>Backup</h2>
@@ -227,9 +229,6 @@
           </div>
         </section>
 
-        <footer class="footer muted">
-          One command to run → everything else in the UI.
-        </footer>
       </main>
     </div>
 

@@ -77,9 +77,9 @@ function restoreSelectedProject() {
 
 function updateSelectedProjectLabels() {
   const label = state.selectedProjectName
-    ? `${state.selectedProjectName} (id=${state.selectedProjectId})`
+    ? state.selectedProjectName
     : state.selectedProjectId
-      ? `Project id=${state.selectedProjectId}`
+      ? "Selected"
       : "—";
   $("selectedProjectLabel").textContent = label;
   $("intelProjectLabel").textContent = label;
@@ -103,7 +103,7 @@ function renderProjectTree(filterText = "") {
       <div class="project-icon">PR</div>
       <div class="project-meta">
         <div class="project-name">${escapeHtml(p.name)}</div>
-        <div class="project-id">id=${p.id}</div>
+        ${p.description ? `<div class="project-desc">${escapeHtml(String(p.description).slice(0, 60))}${(p.description || "").length > 60 ? "…" : ""}</div>` : ""}
       </div>
     `;
     el.addEventListener("click", async () => {
@@ -133,15 +133,13 @@ function renderPending(items) {
     const el = document.createElement("div");
     el.className = "item";
     const rementionedTag = ai.last_rementioned_meeting_id
-      ? `<span class="tag carry-forward" title="Re-committed in a later meeting (not done on time)">re-mentioned in meeting ${ai.last_rementioned_meeting_id}</span>`
+      ? `<span class="tag carry-forward" title="Re-committed in a later meeting (not done on time)">re-mentioned</span>`
       : "";
     el.innerHTML = `
       <div>
         <div class="item-title">${escapeHtml(fmtActionItem(ai))}</div>
         <div class="item-meta">
-          <span class="tag">id=${ai.id}</span>
-          <span class="tag">status=${escapeHtml(ai.status)}</span>
-          ${ai.created_in_meeting_id ? `<span class="tag">created_in_meeting=${ai.created_in_meeting_id}</span>` : ""}
+          <span class="tag">${escapeHtml(ai.status)}</span>
           ${rementionedTag}
         </div>
       </div>
@@ -200,8 +198,6 @@ function renderCompleted(items) {
         <div class="item-title">${escapeHtml(fmtActionItem(ai))}</div>
         <div class="item-meta">
           <span class="tag ok">completed</span>
-          <span class="tag">id=${ai.id}</span>
-          ${ai.resolved_in_meeting_id ? `<span class="tag">resolved_in_meeting=${ai.resolved_in_meeting_id}</span>` : ""}
         </div>
       </div>
       <div class="item-actions">
@@ -262,10 +258,9 @@ function renderMinutes(meeting) {
 
   root.innerHTML = `
     <div class="minutes">
-      <div class="row small">
-        <span><b>meeting_id:</b> ${meeting.id}</span>
-        <span><b>status:</b> ${escapeHtml(meeting.status)}</span>
-        <span><b>created:</b> ${escapeHtml(meeting.created_at || "")}</span>
+      <div class="row small minutes-meta">
+        <span><b>Status:</b> ${escapeHtml(meeting.status)}</span>
+        <span><b>Created:</b> ${escapeHtml(meeting.created_at || "").slice(0, 19).replace("T", " ")}</span>
       </div>
 
       <h4>Summary</h4>
@@ -336,7 +331,7 @@ async function refreshProjects() {
   for (const p of state.projects) {
     const opt = document.createElement("option");
     opt.value = p.id;
-    opt.textContent = `${p.name} (id=${p.id})`;
+    opt.textContent = p.name;
     sel.appendChild(opt);
   }
 
@@ -489,7 +484,7 @@ async function createProject() {
     method: "POST",
     body: JSON.stringify({ name, description }),
   });
-  $("projectStatus").textContent = `Created: ${payload.project.name} (id=${payload.project.id})`;
+  $("projectStatus").textContent = `Created: ${payload.project.name}`;
   await refreshProjects();
   $("projectSelect").value = String(payload.project.id);
   state.selectedProjectId = payload.project.id;
@@ -504,7 +499,8 @@ function setRecStatus(s) {
 }
 
 function setMeetingId(id) {
-  $("meetingId").textContent = id ? String(id) : "—";
+  const el = $("meetingId");
+  if (el) el.textContent = id ? String(id) : "—";
 }
 
 async function startRecording() {
@@ -678,15 +674,15 @@ function renderMeetingsList(meetings) {
 
   for (const m of meetings) {
     const el = document.createElement("div");
-    el.className = "item";
-    const title = m.title || `Meeting ${m.id}`;
+    el.className = "item meeting-card";
+    const title = m.title || `Meeting`;
+    const dateStr = (m.created_at || "").slice(0, 19).replace("T", " ");
     el.innerHTML = `
       <div>
         <div class="item-title">${escapeHtml(title)}</div>
         <div class="item-meta">
-          <span class="tag">id=${m.id}</span>
-          <span class="tag">status=${escapeHtml(m.status)}</span>
-          <span class="tag">created=${escapeHtml((m.created_at || "").slice(0, 19).replace("T", " "))}</span>
+          <span class="tag">${escapeHtml(m.status)}</span>
+          <span class="tag">${escapeHtml(dateStr)}</span>
         </div>
       </div>
       <div class="item-actions">
