@@ -58,7 +58,7 @@ def summarize_with_gemini(
 ) -> StructuredSummaryResult:
     """Summarize with Google Gemini using project context from previous meetings."""
     try:
-        import google.generativeai as genai
+        from google import genai
     except Exception as e:
         raise RuntimeError("google-generativeai not installed. pip install google-generativeai") from e
 
@@ -66,7 +66,6 @@ def summarize_with_gemini(
     if not key or key == "YOUR_GEMINI_API_KEY_HERE":
         raise ValueError("GEMINI_API_KEY not configured")
 
-    genai.configure(api_key=key)
 
     context_block = ""
     if context_text and context_text.strip():
@@ -75,33 +74,39 @@ def summarize_with_gemini(
 
 IMPORTANT: If the transcript shows someone committing again to a task that already appears in PENDING ACTION ITEMS above (same person, same or similar task), that means they did NOT complete it on time. In your summary (agenda or additionalNotes), explicitly note this. Still include such items in actionItems so we can link them to the existing pending item.
 
-Also: If someone in the transcript REPORTS HAVING COMPLETED a task from PENDING ACTION ITEMS (e.g. "I have prepared the ppt last week", "Gargi prepared the slides"), add it to "actionItemsReportedCompleted" as array of {"who": "Name", "what": "task"} matching the pending item so we can mark it completed. Only include tasks clearly reported as DONE.
+Also: If someone in the transcript REPORTS HAVING COMPLETED a task from PENDING ACTION ITEMS (e.g. "I have prepared the ppt last week", "Gargi prepared the slides"), add it to "actionItemsReportedCompleted" as array of {{"who": "Name", "what": "task"}} matching the pending item so we can mark it completed. Only include tasks clearly reported as DONE.
 
 """
 
-    prompt = f"""{context_block}Analyze this meeting transcript. Return ONLY a JSON object (no markdown):
+    prompt = (
+    context_block
+    + """Analyze this meeting transcript. Return ONLY a JSON object (no markdown):
 
-{{
+{
   "agenda": "Brief main purpose (2-3 sentences)",
   "keyPoints": ["Point 1", "Point 2"],
-  "actionItems": [{{ "task": "Description", "assignee": "Name or Not specified", "deadline": "Date or Not specified" }}],
-  "actionItemsReportedCompleted": [{{ "who": "Name", "what": "task reported as done" }}],
+  "actionItems": [{"task": "Description", "assignee": "Name or Not specified", "deadline": "Date or Not specified"}],
+  "actionItemsReportedCompleted": [{"who": "Name", "what": "task reported as done"}],
   "decisions": ["Decision 1", "Decision 2"],
   "nextSteps": ["Step 1", "Step 2"],
   "participants": ["Name 1"],
   "meetingDate": "Date or Not specified",
   "additionalNotes": "Other notes"
-}}
+}
 
 TRANSCRIPT:
-{transcript}"""
+"""
+    + transcript
+)
 
-    model = genai.GenerativeModel(
-        "gemini-2.0-flash",
-        generation_config=genai.types.GenerationConfig(temperature=0.3, max_output_tokens=2000),
-    )
-    response = model.generate_content(prompt)
-    summary_text = (response.text or "").strip()
+    client = genai.Client(api_key=key)
+
+    response = client.models.generate_content(
+    model="gemini-2.5-flash",
+    contents=prompt
+)
+
+    summary_text = response.text
 
     cleaned = summary_text.replace("```json", "").replace("```", "").strip()
     json_match = re.search(r"\{[\s\S]*\}", cleaned)

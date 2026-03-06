@@ -14,6 +14,7 @@ from .summarizer import (
     summarize_with_gemini,
     summarize_with_transformers,
 )
+import traceback
 
 
 def _norm(s: str | None) -> str:
@@ -231,7 +232,8 @@ def process_meeting(meeting: Meeting) -> Meeting:
             transcript_text = asr.text
             transcript_model = asr.model_name
             transcript_lang = asr.language
-        except Exception:
+        except Exception as e:
+            print("Whisper transcription failed:", e)
             transcript_text = (
                 "ASR disabled (set DEEPGRAM_API_KEY for cloud transcription, or install ffmpeg + whisper.cpp). "
                 "This placeholder keeps the pipeline demo-able."
@@ -286,8 +288,10 @@ def process_meeting(meeting: Meeting) -> Meeting:
         try:
             summ = summarize_with_gemini(context_text=context_text, transcript=transcript_text, api_key=gemini_key)
             use_gemini_decisions_and_actions = True
-        except Exception:
-            pass
+
+        except Exception as e:
+            print("Gemini summarization failed:", e)
+            traceback.print_exc()
 
     if summ is None:
         try:

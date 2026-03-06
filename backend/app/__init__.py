@@ -7,9 +7,10 @@ from sqlalchemy import text
 
 from .config import Config
 from .db import db
+from typing import Optional, Type
 
 
-def create_app(config_object: type[Config] | None = None) -> Flask:
+def create_app(config_object: Optional[Type[Config]] = None) -> Flask:    
     """
     Flask app factory.
 
