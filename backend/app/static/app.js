@@ -5,6 +5,7 @@ const state = {
   selectedProjectId: null,
   selectedProjectName: null,
   participants: [],
+  name_aliases: {}, // { "kagi": "Gargi" } — transcript shows → display as (labels only, transcript text unchanged)
   meetingId: null,
   recorder: null,
   chunks: [],
@@ -250,6 +251,19 @@ function renderMinutes(meeting) {
   const notesEl = $("meetingNotesInput");
   if (notesEl) notesEl.value = meeting.notes || "";
 
+  const audioWrap = $("meetingAudioWrap");
+  const audioEl = $("meetingAudio");
+  if (audioWrap && audioEl) {
+    if (meeting.audio_path) {
+      audioWrap.style.display = "flex";
+      audioWrap.style.alignItems = "center";
+      audioEl.src = `/api/meetings/${meeting.id}/audio`;
+    } else {
+      audioWrap.style.display = "none";
+      audioEl.removeAttribute("src");
+    }
+  }
+
   const summary = meeting.summary || null;
   const transcript = meeting.transcript || null;
 
@@ -395,6 +409,74 @@ function renderParticipants() {
     wrap.appendChild(pill);
   }
   root.appendChild(wrap);
+}
+
+function renderNameAliases() {
+  const root = $("nameAliasesList");
+  if (!root) return;
+  root.innerHTML = "";
+  const entries = Object.entries(state.name_aliases || {});
+  if (!entries.length) {
+    root.innerHTML = `<div class="muted">No corrections yet. If the transcript shows "kagi", add kagi → Gargi so summaries and action items show the correct name.</div>`;
+  }
+  for (const [fromVal, toVal] of entries) {
+    const row = document.createElement("div");
+    row.className = "row";
+    row.innerHTML = `
+      <input type="text" data-alias-from placeholder="Transcript shows (e.g. kagi)" value="${escapeHtml(fromVal)}" class="grow" />
+      <span class="muted">→</span>
+      <input type="text" data-alias-to placeholder="Display as (e.g. Gargi)" value="${escapeHtml(toVal)}" class="grow" />
+      <button data-alias-remove data-from="${escapeHtml(fromVal)}">Remove</button>
+    `;
+    row.querySelector("input[data-alias-from]").addEventListener("change", (e) => {
+      const newFrom = e.target.value.trim();
+      if (newFrom && fromVal !== newFrom) {
+        delete state.name_aliases[fromVal];
+        state.name_aliases[newFrom] = toVal;
+        renderNameAliases();
+      }
+    });
+    row.querySelector("input[data-alias-to]").addEventListener("change", (e) => {
+      const newTo = e.target.value.trim();
+      if (newTo !== toVal) {
+        state.name_aliases[fromVal] = newTo;
+        renderNameAliases();
+      }
+    });
+    row.querySelector("[data-alias-remove]").addEventListener("click", () => {
+      delete state.name_aliases[fromVal];
+      renderNameAliases();
+    });
+    root.appendChild(row);
+  }
+}
+
+function addNameAliasRow() {
+  const fromInput = $("nameAliasFromInput");
+  const toInput = $("nameAliasToInput");
+  if (!fromInput || !toInput) return;
+  const fromVal = fromInput.value.trim();
+  const toVal = toInput.value.trim();
+  if (!fromVal || !toVal) return;
+  state.name_aliases[fromVal] = toVal;
+  fromInput.value = "";
+  toInput.value = "";
+  renderNameAliases();
+}
+
+async function saveNameAliases() {
+  if (!state.selectedProjectId) return;
+  const statusEl = $("nameAliasesStatus");
+  try {
+    if (statusEl) statusEl.textContent = "Saving...";
+    await api(`/api/projects/${state.selectedProjectId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name_aliases: state.name_aliases }),
+    });
+    if (statusEl) statusEl.textContent = "Saved. Summaries and action item labels will use these names.";
+  } catch (e) {
+    if (statusEl) statusEl.textContent = `Error: ${e.message}`;
+  }
 }
 
 function renderSegmentsEditor(segments) {
@@ -632,6 +714,9 @@ async function loadHistory() {
   const emptyEl = $("meetingsEmpty");
   if (emptyEl) { emptyEl.style.display = meetings.length ? "none" : "block"; }
   await loadParticipants();
+  state.name_aliases = payload.project?.name_aliases || {};
+  if (typeof state.name_aliases !== "object" || state.name_aliases === null) state.name_aliases = {};
+  renderNameAliases();
 
   // Completed items are fetched on-demand to keep /history lean.
   const showCompleted = $("showCompletedToggle")?.checked;
@@ -916,6 +1001,11 @@ function wire() {
     }
   });
 
+  const addNameAliasBtn = $("addNameAliasBtn");
+  if (addNameAliasBtn) addNameAliasBtn.addEventListener("click", addNameAliasRow);
+  const saveNameAliasesBtn = $("saveNameAliasesBtn");
+  if (saveNameAliasesBtn) saveNameAliasesBtn.addEventListener("click", saveNameAliases);
+
   $("generateSegmentsBtn").addEventListener("click", async () => {
     try {
       $("segmentsStatus").textContent = "Generating...";
@@ -931,17 +1021,6 @@ function wire() {
       await saveSegments();
     } catch (e) {
       $("segmentsStatus").textContent = `Error: ${e.message}`;
-    }
-  });
-
-  // Export / Print
-  $("exportJsonBtn").addEventListener("click", async () => {
-    try {
-      if (!state.currentMeeting?.id) throw new Error("Open a meeting first");
-      const payload = await api(`/api/meetings/${state.currentMeeting.id}/export`, { method: "GET" });
-      downloadJson(`meeting_${state.currentMeeting.id}_minutes.json`, payload);
-    } catch (e) {
-      $("meetingStatus").textContent = `Error: ${e.message}`;
     }
   });
 

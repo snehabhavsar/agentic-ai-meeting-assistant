@@ -23,6 +23,9 @@ class Project(db.Model):
     # Lightweight participant storage for manual speaker labeling (viva-friendly).
     # Stored as JSON string: ["Alice", "Bob", ...]
     participants_json = db.Column(db.Text, nullable=True)
+    # Correct ASR misrecognized names for labels only (transcript text is not changed).
+    # Stored as JSON object: {"kagi": "Gargi", "sneha": "Sneha"} — used in summaries and action item "who" display.
+    name_aliases_json = db.Column(db.Text, nullable=True)
     archived = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
@@ -30,13 +33,21 @@ class Project(db.Model):
     action_items = db.relationship("ActionItem", back_populates="project", cascade="all, delete-orphan")
 
     def to_dict(self) -> dict:
+        import json
+
         participants = None
         try:
-            import json
-
             participants = json.loads(self.participants_json) if self.participants_json else []
         except Exception:
             participants = None
+
+        name_aliases = None
+        try:
+            name_aliases = json.loads(self.name_aliases_json) if self.name_aliases_json else {}
+            if not isinstance(name_aliases, dict):
+                name_aliases = {}
+        except Exception:
+            name_aliases = {}
 
         return {
             "id": self.id,
@@ -44,6 +55,8 @@ class Project(db.Model):
             "description": self.description,
             "participants_json": self.participants_json,
             "participants": participants,
+            "name_aliases_json": self.name_aliases_json,
+            "name_aliases": name_aliases,
             "archived": getattr(self, "archived", False),
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

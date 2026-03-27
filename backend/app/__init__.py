@@ -118,6 +118,8 @@ def create_app(config_object: Optional[Type[Config]] = None) -> Flask:
             col_names = {c[1] for c in cols}
             if "archived" not in col_names:
                 db.session.execute(text("ALTER TABLE projects ADD COLUMN archived INTEGER DEFAULT 0"))
+            if "name_aliases_json" not in col_names:
+                db.session.execute(text("ALTER TABLE projects ADD COLUMN name_aliases_json TEXT"))
 
             # meetings.notes
             cols = db.session.execute(text("PRAGMA table_info(meetings)")).fetchall()

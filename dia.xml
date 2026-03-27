@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxGraphModel dx="1200" dy="700" grid="1" gridSize="10" guides="1" tooltips="1" connect="1"
+arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1000">
+<root>
+
+<mxCell id="0"/>
+<mxCell id="1" parent="0"/>
+
+<!-- Client -->
+<mxCell id="2" value="Client Layer
+Browser UI
+Record / Upload Meeting Audio
+View Summary & Action Items"
+style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#000000;fillColor=#ffffff;"
+vertex="1" parent="1">
+<mxGeometry x="100" y="100" width="220" height="120" as="geometry"/>
+</mxCell>
+
+<!-- Flask Backend -->
+<mxCell id="3" value="Backend API Layer
+Flask Server
+Projects API
+Meetings API
+Action Items API"
+style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#000000;fillColor=#ffffff;"
+vertex="1" parent="1">
+<mxGeometry x="400" y="100" width="240" height="120" as="geometry"/>
+</mxCell>
+
+<!-- Processing Engine -->
+<mxCell id="4" value="Processing Engine
+processor.py
+Context Builder
+Action Extractor"
+style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#000000;fillColor=#ffffff;"
+vertex="1" parent="1">
+<mxGeometry x="720" y="100" width="240" height="120" as="geometry"/>
+</mxCell>
+
+<!-- ASR -->
+<mxCell id="5" value="Speech Recognition Layer
+Deepgram ASR
+Whisper.cpp
+OpenAI Whisper"
+style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#000000;fillColor=#ffffff;"
+vertex="1" parent="1">
+<mxGeometry x="720" y="300" width="240" height="120" as="geometry"/>
+</mxCell>
+
+<!-- AI Summarization -->
+<mxCell id="6" value="AI Summarization Layer
+Google Gemini
+BART Transformer"
+style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#000000;fillColor=#ffffff;"
+vertex="1" parent="1">
+<mxGeometry x="1000" y="300" width="240" height="120" as="geometry"/>
+</mxCell>
+
+<!-- Database -->
+<mxCell id="7" value="Data Storage Layer
+SQLAlchemy ORM
+SQLite / PostgreSQL
+Meeting Data
+Action Items"
+style="shape=cylinder;whiteSpace=wrap;html=1;strokeColor=#000000;fillColor=#ffffff;"
+vertex="1" parent="1">
+<mxGeometry x="400" y="320" width="240" height="120" as="geometry"/>
+</mxCell>
+
+<!-- Edges -->
+
+<mxCell id="8" style="endArrow=block;strokeColor=#000000;" edge="1" parent="1"
+source="2" target="3">
+<mxGeometry relative="1" as="geometry"/>
+</mxCell>
+
+<mxCell id="9" style="endArrow=block;strokeColor=#000000;" edge="1" parent="1"
+source="3" target="4">
+<mxGeometry relative="1" as="geometry"/>
+</mxCell>
+
+<mxCell id="10" style="endArrow=block;strokeColor=#000000;" edge="1" parent="1"
+source="4" target="5">
+<mxGeometry relative="1" as="geometry"/>
+</mxCell>
+
+<mxCell id="11" style="endArrow=block;strokeColor=#000000;" edge="1" parent="1"
+source="5" target="6">
+<mxGeometry relative="1" as="geometry"/>
+</mxCell>
+
+<mxCell id="12" style="endArrow=block;strokeColor=#000000;" edge="1" parent="1"
+source="4" target="7">
+<mxGeometry relative="1" as="geometry"/>
+</mxCell>
+
+</root>
+</mxGraphModel>

@@ -4,7 +4,7 @@ import json
 import os
 
 from ..db import db
-from ..models import ActionItem, Meeting, Summary, Transcript
+from ..models import ActionItem, Meeting, Project, Summary, Transcript
 from ..config import Config
 from .action_extractor import extract_decisions_and_actions
 from .asr_deepgram import transcribe_with_deepgram
@@ -24,6 +24,40 @@ def _norm(s: str | None) -> str:
     s = re.sub(r"[^a-z0-9\s]+", " ", s)
     s = re.sub(r"\s+", " ", s).strip()
     return s
+
+
+def _get_name_aliases(project_id: int) -> dict:
+    """Return project name_aliases dict, e.g. {"kagi": "Gargi"}."""
+    project = Project.query.get(project_id)
+    if not project or not getattr(project, "name_aliases_json", None):
+        return {}
+    try:
+        aliases = json.loads(project.name_aliases_json)
+        return aliases if isinstance(aliases, dict) else {}
+    except Exception:
+        return {}
+
+
+def _apply_name_alias_to_who(who: str | None, aliases: dict) -> str | None:
+    """Apply name aliases to a single 'who' label (case-insensitive key match)."""
+    if not who or not aliases:
+        return who
+    w = (who or "").strip()
+    for key, value in aliases.items():
+        if (key or "").strip().lower() == w.lower():
+            return value
+    return who
+
+
+def _apply_name_aliases_to_text(text: str, aliases: dict) -> str:
+    """Replace ASR misrecognized names in text with corrected names (for summarizer input only; transcript is not modified)."""
+    if not text or not aliases:
+        return text
+    result = text
+    for key, value in (aliases or {}).items():
+        if key and value:
+            result = result.replace(key, value)
+    return result
 
 
 def _split_into_segments(transcript_text: str) -> list[dict]:
@@ -147,11 +181,12 @@ def build_context_for_project(project_id: int, max_meetings: int = 5) -> str:
         for i, s in enumerate(reversed(recent_summaries), start=1):
             parts.append(f"- Summary {i}: {s.summary_text}")
 
+    aliases = _get_name_aliases(project_id)
     if pending_items:
         parts.append("\nPENDING ACTION ITEMS (carry-forward; if someone commits again to the same task in this meeting, they did not complete it on time):")
         for ai in pending_items:
             due = ai.by_when.isoformat() if ai.by_when else "N/A"
-            who = ai.who or "Unassigned"
+            who = _apply_name_alias_to_who(ai.who, aliases) or "Unassigned"
             parts.append(f"- [{ai.id}] {who} – {ai.what} – due: {due}")
 
     return "\n".join(parts).strip()
@@ -266,6 +301,26 @@ def process_meeting(meeting: Meeting) -> Meeting:
     # --- Context memory (project-based): previous summaries + pending action items ---
     context_text = build_context_for_project(meeting.project_id)
 
+    # --- Transcript for summarization: apply name aliases (and optional speaker labels) so output uses correct names ---
+    aliases = _get_name_aliases(meeting.project_id)
+    transcript_for_summary = transcript_text
+    segments = None
+    if getattr(transcript, "speaker_segments_json", None):
+        try:
+            segments = json.loads(transcript.speaker_segments_json or "[]")
+        except Exception:
+            segments = None
+    if segments and isinstance(segments, list) and len(segments) > 0:
+        lines = []
+        for seg in segments:
+            sp = (seg.get("speaker") or "").strip() or "Unassigned"
+            txt = (seg.get("text") or "").strip()
+            if txt:
+                lines.append(f"{sp}: {txt}")
+        if lines:
+            transcript_for_summary = "\n".join(lines)
+    transcript_for_summary = _apply_name_aliases_to_text(transcript_for_summary, aliases)
+
     # --- Summarization (Gemini first with context, then BART/fallback) ---
     meeting.processing_stage = "summary"
     meeting.processing_progress = max(meeting.processing_progress or 0, 85)
@@ -275,18 +330,18 @@ def process_meeting(meeting: Meeting) -> Meeting:
         [
             context_text if context_text else "PROJECT CONTEXT: (none)",
             "CURRENT MEETING TRANSCRIPT:",
-            transcript_text,
+            transcript_for_summary,
         ]
     )
 
     use_gemini_decisions_and_actions = False
-    extraction = extract_decisions_and_actions(transcript_text)  # default rule-based
+    extraction = extract_decisions_and_actions(transcript_for_summary)  # rule-based on corrected transcript
     summ = None
 
     gemini_key = os.environ.get("GEMINI_API_KEY") or getattr(Config, "GEMINI_API_KEY", None)
     if gemini_key and gemini_key != "YOUR_GEMINI_API_KEY_HERE":
         try:
-            summ = summarize_with_gemini(context_text=context_text, transcript=transcript_text, api_key=gemini_key)
+            summ = summarize_with_gemini(context_text=context_text, transcript=transcript_for_summary, api_key=gemini_key)
             use_gemini_decisions_and_actions = True
 
         except Exception as e:

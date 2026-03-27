@@ -3,6 +3,7 @@ from sqlalchemy import or_
 
 from ..db import db
 from ..models import Project, Meeting, ActionItem
+from ..services.processor import _apply_name_alias_to_who, _get_name_aliases
 
 
 bp = Blueprint("projects", __name__)
@@ -55,12 +56,23 @@ def delete_project(project_id: int):
 
 @bp.patch("/projects/<int:project_id>")
 def update_project(project_id: int):
+    import json as _json
+
     project = Project.query.get_or_404(project_id)
     payload = request.get_json(force=True, silent=True) or {}
     if "archived" in payload:
         project.archived = bool(payload["archived"])
     if "description" in payload:
         project.description = (payload.get("description") or "").strip() or None
+    if "name_aliases" in payload:
+        aliases = payload.get("name_aliases")
+        if aliases is None:
+            project.name_aliases_json = None
+        elif isinstance(aliases, dict):
+            cleaned = {str(k).strip(): str(v).strip() for k, v in aliases.items() if k and v}
+            project.name_aliases_json = _json.dumps(cleaned) if cleaned else None
+        else:
+            return {"error": "name_aliases must be an object, e.g. {\"kagi\": \"Gargi\"}"}, 400
     db.session.commit()
     return {"project": project.to_dict()}
 
@@ -114,6 +126,11 @@ def project_history(project_id: int):
     meetings_count = Meeting.query.filter_by(project_id=project_id).count()
     last_meeting_at = meetings[0].created_at.isoformat() if meetings else None
 
+    aliases = _get_name_aliases(project_id)
+    pending_with_aliases = [
+        {**ai.to_dict(), "who": _apply_name_alias_to_who(ai.who, aliases)}
+        for ai in pending_items
+    ]
     return {
         "project": project.to_dict(),
         "stats": {
@@ -123,7 +140,7 @@ def project_history(project_id: int):
             "last_meeting_at": last_meeting_at,
         },
         "meetings": [m.to_dict(include_children=True) for m in meetings],
-        "pending_action_items": [ai.to_dict() for ai in pending_items],
+        "pending_action_items": pending_with_aliases,
     }
 
 

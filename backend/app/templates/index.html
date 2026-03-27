@@ -139,11 +139,11 @@
             <div class="card">
               <h2>Meeting minutes</h2>
               <div class="row">
-                <button id="exportJsonBtn">Export JSON</button>
                 <button id="printBtn">Print / Save PDF</button>
-                <button id="downloadPdfBtn">Download PDF</button>
-                <input id="emailSummaryTo" placeholder="Email to" class="email-input" />
-                <button id="emailSummaryBtn">Email summary</button>
+              </div>
+              <div id="meetingAudioWrap" class="row" style="display:none;">
+                <label class="muted">Listen to recording:</label>
+                <audio id="meetingAudio" controls class="audio" style="max-width:100%;"></audio>
               </div>
               <div class="row notes-row">
                 <div class="grow notes-wrap">
@@ -185,6 +185,25 @@
               <div id="segmentsEditor" class="list"></div>
               <div id="segmentsStatus" class="status"></div>
             </div>
+          </div>
+
+          <div class="card">
+            <div class="row between">
+              <h2>Speaker name corrections</h2>
+              <button id="saveNameAliasesBtn" class="primary">Save</button>
+            </div>
+            <div class="status muted">
+              If the transcript shows a wrong name (e.g. &quot;kagi&quot;), map it to the correct name (e.g. Gargi).
+              Used in summaries and action item labels only; the stored transcript is not changed.
+            </div>
+            <div class="row">
+              <input id="nameAliasFromInput" placeholder="Transcript shows (e.g. kagi)" class="grow" />
+              <span class="muted">→</span>
+              <input id="nameAliasToInput" placeholder="Display as (e.g. Gargi)" class="grow" />
+              <button id="addNameAliasBtn">Add</button>
+            </div>
+            <div id="nameAliasesList" class="list"></div>
+            <div id="nameAliasesStatus" class="status"></div>
           </div>
 
           <div class="grid-2">

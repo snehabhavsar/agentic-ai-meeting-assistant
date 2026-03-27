@@ -4,6 +4,14 @@ from flask import Blueprint, request
 
 from ..db import db
 from ..models import ActionItem, Project, Meeting
+from ..services.processor import _apply_name_alias_to_who, _get_name_aliases
+
+
+def _action_item_to_dict(ai: ActionItem, aliases: dict) -> dict:
+    """Return ai.to_dict() with who label corrected by project name_aliases."""
+    d = ai.to_dict()
+    d["who"] = _apply_name_alias_to_who(ai.who, aliases)
+    return d
 
 
 bp = Blueprint("action_items", __name__)
@@ -19,7 +27,8 @@ def list_action_items(project_id: int):
         q = q.filter_by(status=status)
 
     items = q.order_by(ActionItem.created_at.desc()).limit(200).all()
-    return {"action_items": [ai.to_dict() for ai in items]}
+    aliases = _get_name_aliases(project_id)
+    return {"action_items": [_action_item_to_dict(ai, aliases) for ai in items]}
 
 
 @bp.post("/projects/<int:project_id>/action_items")
@@ -55,7 +64,8 @@ def create_action_item(project_id: int):
     db.session.add(ai)
     db.session.commit()
 
-    return {"action_item": ai.to_dict()}, 201
+    aliases = _get_name_aliases(project.id)
+    return {"action_item": _action_item_to_dict(ai, aliases)}, 201
 
 
 @bp.patch("/action_items/<int:action_item_id>")
@@ -96,7 +106,8 @@ def update_action_item(action_item_id: int):
             log_activity(project_id=ai.project_id, action_item_id=ai.id, action="action_completed")
         except Exception:
             pass
-    return {"action_item": ai.to_dict()}
+    aliases = _get_name_aliases(ai.project_id)
+    return {"action_item": _action_item_to_dict(ai, aliases)}
 
 
 @bp.delete("/action_items/<int:action_item_id>")
@@ -128,5 +139,7 @@ def bulk_complete_action_items():
             log_activity(project_id=ai.project_id, action_item_id=ai.id, action="action_completed")
     except Exception:
         pass
-    return {"updated": len(items), "action_items": [ai.to_dict() for ai in items]}
+    project_id = items[0].project_id if items else None
+    aliases = _get_name_aliases(project_id) if project_id else {}
+    return {"updated": len(items), "action_items": [_action_item_to_dict(ai, aliases) for ai in items]}
 

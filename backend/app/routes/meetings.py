@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 
-from flask import Blueprint, current_app, request
+from flask import Blueprint, current_app, request, send_file
 
 from ..db import db
 from ..models import Meeting, Project, Transcript, Summary, ActionItem
@@ -83,6 +83,32 @@ def upload_audio(meeting_id: int):
     db.session.commit()
 
     return {"meeting": meeting.to_dict()}, 200
+
+
+@bp.get("/meetings/<int:meeting_id>/audio")
+def get_meeting_audio(meeting_id: int):
+    """
+    Stream the meeting recording so you can play it in the browser.
+    Returns 404 if no audio was uploaded for this meeting.
+    """
+    meeting = Meeting.query.get_or_404(meeting_id)
+    if not meeting.audio_path or not os.path.isfile(meeting.audio_path):
+        return {"error": "no audio for this meeting"}, 404
+    ext = os.path.splitext(meeting.audio_path)[1].lower()
+    mimetypes = {
+        ".webm": "audio/webm",
+        ".wav": "audio/wav",
+        ".mp3": "audio/mpeg",
+        ".m4a": "audio/mp4",
+        ".ogg": "audio/ogg",
+    }
+    mimetype = mimetypes.get(ext, "application/octet-stream")
+    return send_file(
+        meeting.audio_path,
+        mimetype=mimetype,
+        as_attachment=False,
+        download_name=os.path.basename(meeting.audio_path),
+    )
 
 
 @bp.post("/meetings/<int:meeting_id>/process")
@@ -207,77 +233,6 @@ def delete_meeting(meeting_id: int):
     db.session.delete(meeting)
     db.session.commit()
     return {"success": True, "message": "deleted", "project_id": project_id}
-
-
-@bp.get("/meetings/<int:meeting_id>/export")
-def export_meeting(meeting_id: int):
-    """
-    Lightweight export: return full meeting object as JSON (minutes + transcript + action items).
-    Use browser "Print" to generate PDF if needed.
-    """
-
-@bp.get("/meetings/<int:meeting_id>/pdf")
-def meeting_pdf(meeting_id: int):
-    meeting = Meeting.query.get_or_404(meeting_id)
-    try:
-        from reportlab.lib.pagesizes import A4
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
-        from reportlab.lib.styles import getSampleStyleSheet
-        from reportlab.lib.units import inch
-        import io
-        buf = io.BytesIO()
-        doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=50, leftMargin=50, topMargin=50, bottomMargin=50)
-        styles = getSampleStyleSheet()
-        story = []
-        story.append(Paragraph("Meeting Minutes", styles["Title"]))
-        story.append(Paragraph("Meeting #%s" % meeting.id, styles["Heading2"]))
-        story.append(Spacer(1, 0.2*inch))
-        if meeting.title:
-            story.append(Paragraph("Title: %s" % meeting.title.replace("<", "&lt;"), styles["Normal"]))
-        if meeting.summary:
-            story.append(Paragraph("Summary", styles["Heading2"]))
-            story.append(Paragraph((meeting.summary.summary_text or "").replace("\n", "<br/>").replace("<", "&lt;")[:5000], styles["Normal"]))
-        doc.build(story)
-        buf.seek(0)
-        from flask import send_file
-        return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name="meeting_%s.pdf" % meeting_id)
-    except ImportError:
-        return {"error": "reportlab not installed"}, 501
-
-
-@bp.post("/meetings/<int:meeting_id>/email_summary")
-def email_meeting_summary(meeting_id: int):
-    meeting = Meeting.query.get_or_404(meeting_id)
-    payload = request.get_json(force=True, silent=True) or {}
-    to_email = (payload.get("to") or "").strip()
-    if not to_email or "@" not in to_email:
-        return {"error": "valid 'to' email required"}, 400
-    import os
-    if not os.environ.get("SMTP_HOST"):
-        return {"error": "SMTP not configured (set SMTP_HOST, SMTP_USER, SMTP_PASSWORD)"}, 501
-    try:
-        import smtplib
-        from email.mime.text import MIMEText
-        from email.mime.multipart import MIMEMultipart
-        summary = (meeting.summary.summary_text if meeting.summary else "") or "No summary."
-        msg = MIMEMultipart()
-        msg["Subject"] = "Meeting minutes: %s" % (meeting.title or ("Meeting #%s" % meeting.id))
-        msg["From"] = os.environ.get("SMTP_FROM") or os.environ.get("SMTP_USER") or "noreply@meetingai.local"
-        msg["To"] = to_email
-        msg.attach(MIMEText(summary, "plain"))
-        s = smtplib.SMTP(os.environ.get("SMTP_HOST"), int(os.environ.get("SMTP_PORT", 587)))
-        s.starttls()
-        if os.environ.get("SMTP_USER"):
-            s.login(os.environ.get("SMTP_USER"), os.environ.get("SMTP_PASSWORD", ""))
-        s.send_message(msg)
-        s.quit()
-        return {"success": True, "message": "Email sent"}
-    except Exception as e:
-        return {"error": str(e)}, 500
-
-
-    meeting = Meeting.query.get_or_404(meeting_id)
-    return {"meeting": meeting.to_dict(include_children=True)}
 
 
 @bp.post("/meetings/<int:meeting_id>/speaker_segments/generate")
