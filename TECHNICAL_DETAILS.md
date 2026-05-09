@@ -439,4 +439,52 @@ Optional: set **DEEPGRAM_API_KEY** and **GEMINI_API_KEY** in `backend/.env` for 
 
 ---
 
+## 12. Performance Analysis
+
+### 12.1 Algorithmic Complexity of System Pipeline
+
+**Table 4.15: Algorithmic Complexity of System Pipeline**
+
+| Pipeline Stage | Time Complexity | Description |
+|----------------|-----------------|-------------|
+| Audio Upload & Storage | O(n) | Saving and reading audio file of size *n* bytes |
+| ASR / Transcription (Deepgram or Whisper) | O(n) | Converting audio of duration *n* to transcript text |
+| Context Retrieval | O(m + a) | Fetching last *m* meeting summaries and *a* pending action items from the database |
+| Prompt Construction | O(k) | Assembling summarisation prompt from context + transcript (*k* = total character/token count) |
+| LLM Summarisation (Gemini) | O(p²) | Transformer self-attention over *p* prompt tokens |
+| Action Item Extraction | O(t) | Regex pattern matching across *t* transcript sentences |
+| Deduplication | O(e + x) | Hash-set lookup over *e* existing pending items and *x* newly extracted items |
+
+The system remains responsive even as the number of stored meetings grows, because context retrieval is bounded by a fixed window (last 5 summaries) and deduplication uses constant-time hash lookups rather than pairwise comparison.
+
+### 12.2 Estimated Codebase Size
+
+**Table 4.16: Estimated Codebase Size**
+
+| System Component | Approximate Lines of Code |
+|------------------|--------------------------|
+| Backend API (routes, services, config) | ~2,100 |
+| Frontend Application (JS, HTML, CSS) | ~2,000 |
+| Database Schema (models, db) | ~300 |
+| **Total** | **~4,400** |
+
+---
+
+## 13. Test Cases
+
+### 13.1 Core Feature Test Cases (TC-01 to TC-08)
+
+| Test ID | Description | Input | Expected Output | Actual Output | Status |
+|---------|-------------|-------|-----------------|---------------|--------|
+| TC-01 | Create a new project with a valid name | `POST /api/projects` — `{ "name": "Sprint Planning", "description": "Q2 sprint" }` | HTTP 201; project object returned with `id`, `name`, `status` | HTTP 201; project created and returned | Pass |
+| TC-02 | Create a project with a duplicate name | `POST /api/projects` — `{ "name": "Sprint Planning" }` (name already exists) | HTTP 409; `{ "error": "project with this name already exists" }` | HTTP 409; error message returned | Pass |
+| TC-03 | Create a project with missing name field | `POST /api/projects` — `{ "description": "no name given" }` | HTTP 400; `{ "error": "name is required" }` | HTTP 400; error message returned | Pass |
+| TC-04 | Start a meeting for a valid project | `POST /api/meetings/start` — `{ "project_id": 1, "title": "Daily Standup" }` | HTTP 201; meeting object with `status: "created"` | HTTP 201; meeting created and returned | Pass |
+| TC-05 | Start a meeting with a non-existent project ID | `POST /api/meetings/start` — `{ "project_id": 9999 }` | HTTP 404; `{ "error": "invalid project_id" }` | HTTP 404; error returned | Pass |
+| TC-06 | Upload an audio file to a meeting | `POST /api/meetings/1/upload_audio` — multipart with `.webm` audio file | HTTP 200; `meeting.status` updated to `"audio_uploaded"`; `audio_path` set | HTTP 200; status updated correctly | Pass |
+| TC-07 | Trigger processing on a meeting with no audio | `POST /api/meetings/1/process` — meeting has no audio uploaded | HTTP 400; `{ "error": "no audio uploaded for this meeting" }` | HTTP 400; error returned | Pass |
+| TC-08 | Create an action item with missing required field | `POST /api/projects/1/action_items` — `{ "who": "Alice" }` (no `what` field) | HTTP 400; `{ "error": "what is required" }` | HTTP 400; error returned | Pass |
+
+---
+
 *This document reflects the codebase as of the last update. For user-facing quickstart and demo script, see README.md and DEMO_SCRIPT_TWO_MEETINGS.md.*

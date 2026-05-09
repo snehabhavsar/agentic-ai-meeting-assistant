@@ -1,4 +1,5 @@
 from flask import Blueprint, request
+from flask_login import login_required, current_user
 from sqlalchemy import or_
 
 from ..db import db
@@ -9,7 +10,14 @@ from ..services.processor import _apply_name_alias_to_who, _get_name_aliases
 bp = Blueprint("projects", __name__)
 
 
+def _owned_or_404(project_id: int) -> Project:
+    """Return the project if it belongs to current_user, else 404."""
+    project = Project.query.filter_by(id=project_id, user_id=current_user.id).first_or_404()
+    return project
+
+
 @bp.post("/projects")
+@login_required
 def create_project():
     payload = request.get_json(force=True, silent=False) or {}
     name = (payload.get("name") or "").strip()
@@ -18,11 +26,11 @@ def create_project():
     if not name:
         return {"error": "name is required"}, 400
 
-    existing = Project.query.filter_by(name=name).first()
+    existing = Project.query.filter_by(name=name, user_id=current_user.id).first()
     if existing:
         return {"error": "project with this name already exists", "project": existing.to_dict()}, 409
 
-    project = Project(name=name, description=description)
+    project = Project(name=name, description=description, user_id=current_user.id)
     db.session.add(project)
     db.session.commit()
 
@@ -36,9 +44,10 @@ def create_project():
 
 
 @bp.get("/projects")
+@login_required
 def list_projects():
     show_archived = request.args.get("archived", "0").strip() == "1"
-    q = Project.query.order_by(Project.created_at.desc())
+    q = Project.query.filter_by(user_id=current_user.id).order_by(Project.created_at.desc())
     if not show_archived:
         q = q.filter(or_(Project.archived == False, Project.archived == None))
     projects = q.all()
@@ -46,19 +55,20 @@ def list_projects():
 
 
 @bp.delete("/projects/<int:project_id>")
+@login_required
 def delete_project(project_id: int):
-    """Delete a project and all its meetings, action items, etc. (cascade)."""
-    project = Project.query.get_or_404(project_id)
+    project = _owned_or_404(project_id)
     db.session.delete(project)
     db.session.commit()
     return {"success": True, "message": "deleted"}
 
 
 @bp.patch("/projects/<int:project_id>")
+@login_required
 def update_project(project_id: int):
     import json as _json
 
-    project = Project.query.get_or_404(project_id)
+    project = _owned_or_404(project_id)
     payload = request.get_json(force=True, silent=True) or {}
     if "archived" in payload:
         project.archived = bool(payload["archived"])
@@ -78,14 +88,15 @@ def update_project(project_id: int):
 
 
 @bp.get("/projects/<int:project_id>/history")
+@login_required
 def project_history(project_id: int):
-    project = Project.query.get_or_404(project_id)
+    project = _owned_or_404(project_id)
 
     q_meetings = Meeting.query.filter_by(project_id=project_id).order_by(Meeting.created_at.desc())
-    from_param = request.args.get("from", "").strip()
-    to_param = request.args.get("to", "").strip()
+    from_param   = request.args.get("from",   "").strip()
+    to_param     = request.args.get("to",     "").strip()
     status_param = request.args.get("status", "").strip()
-    search_q = request.args.get("q", "").strip()
+    search_q     = request.args.get("q",      "").strip()
 
     if from_param:
         try:
@@ -122,8 +133,8 @@ def project_history(project_id: int):
     )
 
     completed_count = ActionItem.query.filter_by(project_id=project_id, status="completed").count()
-    pending_count = len(pending_items)
-    meetings_count = Meeting.query.filter_by(project_id=project_id).count()
+    pending_count   = len(pending_items)
+    meetings_count  = Meeting.query.filter_by(project_id=project_id).count()
     last_meeting_at = meetings[0].created_at.isoformat() if meetings else None
 
     aliases = _get_name_aliases(project_id)
@@ -132,33 +143,31 @@ def project_history(project_id: int):
         for ai in pending_items
     ]
     return {
-        "project": project.to_dict(),
+        "project":  project.to_dict(),
         "stats": {
-            "meetings_count": meetings_count,
-            "pending_action_items_count": pending_count,
+            "meetings_count":               meetings_count,
+            "pending_action_items_count":   pending_count,
             "completed_action_items_count": completed_count,
-            "last_meeting_at": last_meeting_at,
+            "last_meeting_at":              last_meeting_at,
         },
-        "meetings": [m.to_dict(include_children=True) for m in meetings],
-        "pending_action_items": pending_with_aliases,
+        "meetings":              [m.to_dict(include_children=True) for m in meetings],
+        "pending_action_items":  pending_with_aliases,
     }
 
 
 @bp.get("/projects/<int:project_id>/participants")
+@login_required
 def get_project_participants(project_id: int):
-    project = Project.query.get_or_404(project_id)
+    project = _owned_or_404(project_id)
     return {"project": project.to_dict()}
 
 
 @bp.put("/projects/<int:project_id>/participants")
+@login_required
 def set_project_participants(project_id: int):
-    """
-    Lightweight, viva-friendly manual speaker labeling:
-    store participants list on the Project as JSON.
-    """
     import json
 
-    project = Project.query.get_or_404(project_id)
+    project = _owned_or_404(project_id)
     payload = request.get_json(force=True, silent=False) or {}
     participants = payload.get("participants") or []
 
@@ -176,4 +185,3 @@ def set_project_participants(project_id: int):
     project.participants_json = json.dumps(cleaned)
     db.session.commit()
     return {"project": project.to_dict()}
-

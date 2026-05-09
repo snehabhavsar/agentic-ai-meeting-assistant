@@ -30,6 +30,11 @@ class Config:
 
     MAX_CONTENT_LENGTH = int(os.environ.get("MAX_CONTENT_LENGTH", 200 * 1024 * 1024))  # 200MB
 
+    # Session / auth
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
+    PERMANENT_SESSION_LIFETIME = 60 * 60 * 24 * 30  # 30 days
+
     # Lightweight ASR via whisper.cpp (CLI)
     # Example:
     #   export WHISPER_CPP_MODEL="/path/to/ggml-small.bin"

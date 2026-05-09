@@ -1,9 +1,9 @@
 import os
 import shutil
-import sqlite3
 from datetime import datetime
 
 from flask import Blueprint, current_app, request, send_file
+from flask_login import login_required, current_user
 
 from ..db import db
 from ..models import ActivityLog, Project, Meeting, ActionItem
@@ -13,8 +13,8 @@ bp = Blueprint("misc", __name__)
 
 
 @bp.get("/backup")
+@login_required
 def backup_db():
-    """Download a copy of the SQLite database."""
     uri = current_app.config.get("SQLALCHEMY_DATABASE_URI") or ""
     if not uri.startswith("sqlite:///") or ":memory:" in uri:
         return {"error": "Backup only supported for SQLite file database"}, 400
@@ -44,9 +44,9 @@ def backup_db():
 
 
 @bp.get("/projects/<int:project_id>/activity")
+@login_required
 def project_activity(project_id: int):
-    """Return recent activity log entries for the project."""
-    Project.query.get_or_404(project_id)
+    Project.query.filter_by(id=project_id, user_id=current_user.id).first_or_404()
     limit = min(int(request.args.get("limit", 50)), 200)
     entries = (
         ActivityLog.query.filter_by(project_id=project_id)

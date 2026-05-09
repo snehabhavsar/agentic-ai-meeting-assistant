@@ -1,257 +1,659 @@
 <!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Meeting AI (Project-based)</title>
-    <link rel="stylesheet" href="/static/styles.css" />
-  </head>
-  <body>
-    <div class="app">
-      <aside class="sidebar">
-        <div class="brand">
-          <div class="brand-title">Meeting AI</div>
-          <div class="brand-sub">Project-based minutes + action intelligence</div>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Meeting AI — Project Intelligence</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+
+<!-- Toast Container -->
+<div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="false"></div>
+
+<!-- Confirm Modal -->
+<div id="modalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modalTitle" hidden>
+  <div id="confirmModal" class="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle" class="modal-title">Confirm</h3>
+    </div>
+    <div class="modal-body">
+      <p id="modalMessage" class="modal-message"></p>
+    </div>
+    <div class="modal-footer">
+      <button id="modalCancelBtn" class="btn btn-ghost">Cancel</button>
+      <button id="modalConfirmBtn" class="btn btn-danger">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div class="app" id="app">
+
+  <!-- ═══════════════════════════════════════════════════
+       SIDEBAR
+  ═══════════════════════════════════════════════════ -->
+  <aside class="sidebar" id="sidebar" aria-label="Main navigation">
+
+    <div class="sidebar-header">
+      <div class="brand">
+        <div class="brand-icon" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a8 8 0 0 1 8 8"/><path d="M12 2a8 8 0 0 0-8 8"/><path d="M12 22a8 8 0 0 0 8-8"/><path d="M12 22a8 8 0 0 1-8-8"/><circle cx="12" cy="12" r="3"/></svg>
         </div>
-
-        <div class="nav">
-          <button id="navSetup" class="nav-btn">Setup</button>
-          <button id="navRecord" class="nav-btn">Record</button>
-          <button id="navIntel" class="nav-btn">Project Intelligence</button>
+        <div class="brand-text">
+          <div class="brand-name">Meeting AI</div>
+          <div class="brand-tagline">Intelligence Platform</div>
         </div>
-
-        <div class="sidebar-section">
-          <div class="sidebar-title">Project Explorer</div>
-          <input id="projectSearch" class="sidebar-input" placeholder="Search projects…" />
-          <div id="projectTree" class="project-tree"></div>
-          <div class="sidebar-hint muted">
-            Projects are shown like folders. Select one to view details.
-          </div>
-        </div>
-
-      </aside>
-
-      <main class="main">
-        <!-- SETUP VIEW -->
-        <section id="viewSetup" class="view">
-          <div class="page-header">
-            <h1>Setup</h1>
-            <p class="subtitle">Create a project or pick an existing one. Then proceed to recording.</p>
-          </div>
-
-          <div class="card">
-            <h2>Select an existing project</h2>
-            <div class="row">
-              <select id="projectSelect"></select>
-              <button id="refreshProjectsBtn">Refresh</button>
-              <button id="useProjectBtn" class="primary">Use this project</button>
-              <button id="deleteProjectBtn" class="danger-outline">Delete project</button>
-            </div>
-            <label class="row row-small"><input type="checkbox" id="showArchivedToggle" /> Show archived projects</label>
-            <div id="projectStatus" class="status"></div>
-          </div>
-
-          <div class="card">
-            <h2>Create a new project</h2>
-            <div class="row">
-              <input id="projectName" placeholder="Project name (required)" />
-              <input id="projectDesc" placeholder="Description (optional)" />
-              <button id="createProjectBtn" class="primary">Create Project</button>
-            </div>
-            <div class="status muted">
-              Tip: Use the project name as your “folder name” for the viva demo.
-            </div>
-          </div>
-        </section>
-
-        <!-- RECORD VIEW -->
-        <section id="viewRecord" class="view" hidden>
-          <div class="page-header">
-            <h1>Record meeting</h1>
-            <p class="subtitle page-subtitle">
-              Current project: <b id="selectedProjectLabel">—</b>
-            </p>
-          </div>
-
-          <div class="card">
-            <h2>Meeting info</h2>
-            <div class="row">
-              <input id="meetingTitle" placeholder="Meeting title (optional)" />
-            </div>
-          </div>
-
-          <div class="card">
-            <h2>Microphone recording</h2>
-            <div class="row">
-              <button id="startBtn" class="primary">Start Recording</button>
-              <button id="stopBtn" class="danger" disabled>Stop</button>
-              <button id="viewIntelBtn" disabled>View Project Intelligence</button>
-            </div>
-            <div class="row small">
-              <span><b>Status:</b> <span id="recStatus">idle</span></span>
-            </div>
-            <audio id="playback" controls class="audio" hidden></audio>
-            <div id="meetingStatus" class="status"></div>
-          </div>
-
-          <div class="card">
-            <h2>Upload an existing recording</h2>
-            <p class="subtitle card-subtitle">
-              If you already have an audio file (.wav/.mp3/.m4a/.webm), upload it and process it under the selected
-              project.
-            </p>
-            <div class="row">
-              <input id="uploadTitle" placeholder="Meeting title (optional)" class="grow" />
-              <input id="uploadFile" type="file" accept="audio/*" />
-              <button id="uploadProcessBtn" class="primary" disabled>Upload & Process</button>
-            </div>
-            <div id="uploadStatus" class="status"></div>
-          </div>
-        </section>
-
-        <!-- INTELLIGENCE VIEW -->
-        <section id="viewIntel" class="view" hidden>
-          <div class="page-header">
-            <h1>Project Intelligence</h1>
-            <p class="subtitle page-subtitle">
-              Current project: <b id="intelProjectLabel">—</b>
-            </p>
-            <p id="projectDescription" class="subtitle muted project-desc-block" style="display:none"></p>
-          </div>
-
-          <div class="grid-2">
-            <div class="card">
-              <div class="row between">
-                <h2>Meetings (history)</h2>
-                <button id="loadHistoryBtn" class="primary">Refresh</button>
-              </div>
-              <div class="filters-row">
-                <input id="meetingSearchQ" placeholder="Search meetings…" class="filter-search" />
-                <input id="meetingFilterFrom" type="date" title="From" />
-                <input id="meetingFilterTo" type="date" title="To" />
-                <select id="meetingFilterStatus"><option value="">All statuses</option><option value="processed">Processed</option><option value="created">Created</option><option value="failed">Failed</option></select>
-              </div>
-              <div id="meetingsList" class="list"></div>
-              <div id="meetingsEmpty" class="muted" style="display:none">No meetings yet. Record your first meeting.</div>
-              <div class="status muted">Click a meeting to view minutes.</div>
-            </div>
-
-            <div class="card">
-              <h2>Meeting minutes</h2>
-              <div class="row">
-                <button id="printBtn">Print / Save PDF</button>
-              </div>
-              <div id="meetingAudioWrap" class="row" style="display:none;">
-                <label class="muted">Listen to recording:</label>
-                <audio id="meetingAudio" controls class="audio" style="max-width:100%;"></audio>
-              </div>
-              <div class="row notes-row">
-                <div class="grow notes-wrap">
-                  <label for="meetingNotesInput">Meeting notes:</label>
-                  <textarea id="meetingNotesInput" placeholder="Optional notes…" rows="2" class="notes-textarea"></textarea>
-                </div>
-                <button id="saveMeetingNotesBtn" class="primary">Save notes</button>
-              </div>
-              <div id="latestMinutes" class="pre"></div>
-            </div>
-          </div>
-
-          <div class="grid-2">
-            <div class="card">
-              <div class="row between">
-                <h2>Participants (for manual speaker labels)</h2>
-                <button id="saveParticipantsBtn" class="primary">Save</button>
-              </div>
-              <div class="row">
-                <input id="participantInput" placeholder="Add participant name (e.g., Alice)" class="grow" />
-                <button id="addParticipantBtn">Add</button>
-              </div>
-              <div id="participantsList" class="list"></div>
-              <div id="participantsStatus" class="status"></div>
-            </div>
-
-            <div class="card">
-              <div class="row between">
-                <h2>Speaker labeling (manual)</h2>
-                <div class="row">
-                  <button id="generateSegmentsBtn">Generate segments</button>
-                  <button id="saveSegmentsBtn" class="primary" disabled>Save labels</button>
-                </div>
-              </div>
-              <div class="status muted">
-                This is a lightweight alternative to diarization: we split the transcript into segments and you choose
-                the speaker.
-              </div>
-              <div id="segmentsEditor" class="list"></div>
-              <div id="segmentsStatus" class="status"></div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="row between">
-              <h2>Speaker name corrections</h2>
-              <button id="saveNameAliasesBtn" class="primary">Save</button>
-            </div>
-            <div class="status muted">
-              If the transcript shows a wrong name (e.g. &quot;kagi&quot;), map it to the correct name (e.g. Gargi).
-              Used in summaries and action item labels only; the stored transcript is not changed.
-            </div>
-            <div class="row">
-              <input id="nameAliasFromInput" placeholder="Transcript shows (e.g. kagi)" class="grow" />
-              <span class="muted">→</span>
-              <input id="nameAliasToInput" placeholder="Display as (e.g. Gargi)" class="grow" />
-              <button id="addNameAliasBtn">Add</button>
-            </div>
-            <div id="nameAliasesList" class="list"></div>
-            <div id="nameAliasesStatus" class="status"></div>
-          </div>
-
-          <div class="grid-2">
-            <div class="card">
-              <div class="row between">
-                <h2>Pending action items (carry-forward)</h2>
-                <button id="bulkCompleteBtn" class="primary" disabled>Mark selected completed</button>
-                <label class="row small">
-                  <input type="checkbox" id="showCompletedToggle" />
-                  Show completed
-                </label>
-              </div>
-              <div id="pendingItemsList" class="list"></div>
-
-              <div class="divider"></div>
-              <h3>Add action item manually (demo/correction)</h3>
-              <div class="row">
-                <input id="aiWho" placeholder="Who (optional)" />
-                <input id="aiWillDo" placeholder="Will do (optional, e.g., 'prepare')" />
-              </div>
-              <div class="row">
-                <input id="aiWhat" placeholder="What (required)" class="grow" />
-                <input id="aiByWhen" placeholder="By when (YYYY-MM-DD, optional)" />
-                <button id="addAiBtn" class="primary">Add</button>
-              </div>
-              <div id="aiStatus" class="status"></div>
-            </div>
-
-            <div class="card">
-              <h2>Completed action items</h2>
-              <div id="completedItemsList" class="list"></div>
-            </div>
-          </div>
-          <div class="card">
-            <h2>Activity log</h2>
-            <button id="loadActivityBtn">Refresh</button>
-            <div id="activityLogList" class="list list-muted"></div>
-          </div>
-          <div class="card">
-            <h2>Backup</h2>
-            <a href="/api/backup" download class="primary button">Download backup</a>
-          </div>
-        </section>
-
-      </main>
+      </div>
+      <button class="btn-icon sidebar-collapse-btn" id="sidebarCollapseBtn" title="Collapse sidebar" aria-label="Collapse sidebar">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m14 9-3 3 3 3"/></svg>
+      </button>
     </div>
 
-    <script src="/static/app.js"></script>
-  </body>
-</html>
+    <nav class="sidebar-nav" aria-label="Primary navigation">
+      <span class="nav-section-label">Navigate</span>
+      <button id="navSetup" class="nav-item" data-view="setup" aria-current="false">
+        <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+        <span class="nav-label">Setup</span>
+      </button>
+      <button id="navRecord" class="nav-item" data-view="record" aria-current="false">
+        <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+        <span class="nav-label">Record</span>
+      </button>
+      <button id="navIntel" class="nav-item" data-view="intel" aria-current="false">
+        <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>
+        <span class="nav-label">Intelligence</span>
+      </button>
+    </nav>
 
+    <div class="sidebar-explorer">
+      <div class="sidebar-section-header">
+        <span class="nav-section-label">Projects</span>
+        <button class="btn-icon-xs" id="refreshSidebarBtn" title="Refresh projects" aria-label="Refresh projects">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+        </button>
+      </div>
+      <div class="sidebar-search-wrap">
+        <svg class="sidebar-search-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="projectSearch" class="sidebar-search-input" placeholder="Search projects…" aria-label="Search projects" />
+      </div>
+      <div id="projectTree" class="project-tree" role="list"></div>
+    </div>
+
+    <div class="sidebar-footer">
+      <button class="nav-item" id="downloadBackupBtn" title="Download backup">
+        <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+        <span class="nav-label">Backup</span>
+      </button>
+      <button class="nav-item" id="darkModeToggle" title="Toggle dark mode" aria-label="Toggle dark mode">
+        <svg class="nav-icon icon-moon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+        <svg class="nav-icon icon-sun" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+        <span class="nav-label">Dark mode</span>
+      </button>
+    </div>
+
+  </aside>
+
+  <!-- Mobile sidebar backdrop -->
+  <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
+
+  <!-- ═══════════════════════════════════════════════════
+       MAIN WRAPPER
+  ═══════════════════════════════════════════════════ -->
+  <div class="main-wrapper" id="mainWrapper">
+
+    <!-- Topbar -->
+    <header class="topbar" role="banner">
+      <div class="topbar-left">
+        <button class="btn-icon topbar-menu-btn" id="sidebarToggleBtn" title="Toggle sidebar" aria-label="Open/close sidebar" aria-expanded="false" aria-controls="sidebar">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+        </button>
+        <div class="topbar-breadcrumb" id="topbarBreadcrumb" aria-label="Breadcrumb">
+          <span class="breadcrumb-app">Meeting AI</span>
+          <span class="breadcrumb-sep" aria-hidden="true">/</span>
+          <span class="breadcrumb-view" id="breadcrumbView">Setup</span>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div id="topbarProjectBadge" class="topbar-project-badge" style="display:none;" title="Active project">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          <span id="topbarProjectName">—</span>
+        </div>
+
+        <!-- User menu -->
+        <div class="user-menu-wrap" id="userMenuWrap">
+          <button class="user-avatar-btn" id="userAvatarBtn" aria-label="Account menu" aria-expanded="false" aria-haspopup="true">
+            <span id="userInitials" class="user-initials">?</span>
+          </button>
+          <div class="user-dropdown" id="userDropdown" hidden role="menu" aria-label="Account menu">
+            <div class="user-dropdown-info">
+              <div class="user-dropdown-avatar" id="userDropdownAvatar">?</div>
+              <div class="user-dropdown-text">
+                <div class="user-dropdown-name" id="userDropdownName">—</div>
+                <div class="user-dropdown-email" id="userDropdownEmail">—</div>
+              </div>
+            </div>
+            <div class="dropdown-sep" role="separator"></div>
+            <button class="dropdown-item dropdown-item-danger" id="logoutBtn" role="menuitem">
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+              Sign out
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- ══ MAIN CONTENT ══ -->
+    <main class="main" id="mainContent">
+
+      <!-- ════════════════════════════════
+           SETUP VIEW
+      ════════════════════════════════ -->
+      <section id="viewSetup" class="view" aria-label="Setup">
+        <div class="page-header">
+          <h1 class="page-title">Setup</h1>
+          <p class="page-subtitle">Create a new project or select an existing one to get started.</p>
+        </div>
+
+        <div class="setup-grid">
+
+          <!-- Create project card -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-icon card-icon-primary" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+              </div>
+              <div class="card-header-text">
+                <h2>Create new project</h2>
+                <p class="text-muted text-sm">Start a fresh project to organise meetings around a theme or goal.</p>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="projectName">Project name <span class="required-star" aria-hidden="true">*</span></label>
+              <input id="projectName" class="form-input" placeholder="e.g. Q2 Planning, Client Onboarding, Product Launch" autocomplete="off" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="projectDesc">Description <span class="optional-label">(optional)</span></label>
+              <input id="projectDesc" class="form-input" placeholder="Short description of this project…" autocomplete="off" />
+            </div>
+            <div class="form-actions">
+              <button id="createProjectBtn" class="btn btn-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                Create Project
+              </button>
+            </div>
+            <div id="projectStatus" class="status-text" role="status" aria-live="polite"></div>
+          </div>
+
+          <!-- Select existing project card -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-icon card-icon-neutral" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              </div>
+              <div class="card-header-text">
+                <h2>Select existing project</h2>
+                <p class="text-muted text-sm">Pick from your existing projects and proceed to record a meeting.</p>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="projectSelect">Project</label>
+              <div class="select-wrap">
+                <select id="projectSelect" class="form-select" aria-label="Select project"></select>
+                <svg class="select-caret" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+              </div>
+            </div>
+            <label class="checkbox-label">
+              <input type="checkbox" id="showArchivedToggle" class="checkbox" />
+              <span class="checkbox-text">Show archived projects</span>
+            </label>
+            <div class="form-actions form-actions-split">
+              <div class="btn-group">
+                <button id="refreshProjectsBtn" class="btn btn-ghost">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+                  Refresh
+                </button>
+                <button id="archiveProjectBtn" class="btn btn-ghost">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect width="22" height="5" x="1" y="3"/><line x1="10" x2="14" y1="12" y2="12"/></svg>
+                  Archive
+                </button>
+                <button id="deleteProjectBtn" class="btn btn-danger-outline">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                  Delete
+                </button>
+              </div>
+              <button id="useProjectBtn" class="btn btn-primary">
+                Use this project
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════
+           RECORD VIEW
+      ════════════════════════════════ -->
+      <section id="viewRecord" class="view" hidden aria-label="Record meeting">
+        <div class="page-header">
+          <div class="page-header-top">
+            <h1 class="page-title">Record Meeting</h1>
+            <div class="project-badge" id="recordProjectBadge">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <span id="selectedProjectLabel">—</span>
+            </div>
+          </div>
+          <p class="page-subtitle">Record live audio or upload an existing file for AI transcription and summarisation.</p>
+        </div>
+
+        <!-- Meeting title -->
+        <div class="card card-inline">
+          <label class="form-label-inline" for="meetingTitle">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Meeting title
+          </label>
+          <input id="meetingTitle" class="form-input" placeholder="Optional – e.g. Sprint Review, Client Call…" autocomplete="off" />
+        </div>
+
+        <!-- Microphone recording card -->
+        <div class="card" id="recordCard">
+          <div class="card-header">
+            <div class="card-icon card-icon-danger" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+            </div>
+            <div class="card-header-text">
+              <h2>Microphone Recording</h2>
+              <p class="text-muted text-sm">Record directly from your device microphone.</p>
+            </div>
+          </div>
+
+          <!-- Waveform visualiser (CSS animated) -->
+          <div class="recorder" id="recorder" aria-label="Recording interface">
+            <div class="waveform" id="waveform" aria-hidden="true">
+              <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+              <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+              <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+              <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+              <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+              <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+              <div class="wave-bar"></div><div class="wave-bar"></div>
+            </div>
+            <div class="recorder-controls">
+              <button id="startBtn" class="record-btn" title="Start recording" aria-label="Start recording">
+                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+              </button>
+              <button id="stopBtn" class="stop-btn" disabled title="Stop recording" aria-label="Stop recording">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="5" y="5" rx="2"/></svg>
+              </button>
+            </div>
+            <div class="recorder-status-row">
+              <span class="rec-dot" id="recDot" aria-hidden="true"></span>
+              <span class="rec-status-text" id="recStatus" role="status" aria-live="polite">Ready to record</span>
+              <span class="rec-timer" id="recTimer" aria-live="polite" aria-atomic="true"></span>
+            </div>
+          </div>
+
+          <audio id="playback" controls class="audio-player" hidden aria-label="Recording playback"></audio>
+          <div id="meetingStatus" class="status-text" role="status" aria-live="polite"></div>
+
+          <div class="card-footer-row">
+            <button id="viewIntelBtn" class="btn btn-ghost btn-sm" disabled>
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>
+              View Project Intelligence
+            </button>
+          </div>
+        </div>
+
+        <!-- Upload recording card -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon card-icon-warning" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" x2="12" y1="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+            </div>
+            <div class="card-header-text">
+              <h2>Upload Recording</h2>
+              <p class="text-muted text-sm">Upload an existing audio file (.wav, .mp3, .m4a, .webm) for AI processing.</p>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="uploadTitle">Meeting title <span class="optional-label">(optional)</span></label>
+            <input id="uploadTitle" class="form-input" placeholder="Defaults to filename if left blank" autocomplete="off" />
+          </div>
+
+          <!-- Drop zone -->
+          <div class="drop-zone" id="dropZone" role="button" tabindex="0" aria-label="Drop audio file or click to browse" aria-describedby="dropHint">
+            <div class="drop-zone-empty" id="dropZoneEmpty">
+              <svg class="drop-icon" xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" x2="12" y1="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+              <p class="drop-primary">Drop your audio file here</p>
+              <p class="drop-secondary" id="dropHint">or <label for="uploadFile" class="drop-browse-link">browse files</label> — .wav, .mp3, .m4a, .webm, .ogg</p>
+            </div>
+            <div class="drop-zone-file" id="dropZoneFile" style="display:none;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 22h.5a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v3"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M2 15h10"/><path d="m9 18 3-3-3-3"/></svg>
+              <div class="drop-file-details">
+                <span id="dropFileName" class="drop-file-name">—</span>
+                <span id="dropFileSize" class="drop-file-size text-muted"></span>
+              </div>
+              <button id="dropFileClear" class="btn-icon-xs drop-clear-btn" title="Remove file" aria-label="Remove selected file">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+              </button>
+            </div>
+            <input id="uploadFile" type="file" accept="audio/*" class="drop-input" aria-hidden="true" tabindex="-1" />
+          </div>
+
+          <!-- Upload progress -->
+          <div class="upload-progress" id="uploadProgress" style="display:none;">
+            <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Processing progress" id="progressBarEl">
+              <div class="progress-fill" id="progressFill" style="width:0%"></div>
+            </div>
+            <div class="progress-stage" id="progressStage"></div>
+          </div>
+
+          <div id="uploadStatus" class="status-text" role="status" aria-live="polite"></div>
+
+          <div class="form-actions">
+            <button id="uploadProcessBtn" class="btn btn-primary" disabled>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="m6.343 6.343-2.828 2.828"/><path d="M2 12h4"/><path d="m6.343 17.657-2.828-2.828"/><path d="M12 18v4"/><path d="m17.657 17.657-2.828-2.828"/><path d="M18 12h4"/><path d="m17.657 6.343-2.828 2.828"/></svg>
+              Upload &amp; Process
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════
+           INTELLIGENCE VIEW
+      ════════════════════════════════ -->
+      <section id="viewIntel" class="view" hidden aria-label="Project Intelligence">
+        <div class="page-header">
+          <div class="page-header-top">
+            <h1 class="page-title">Project Intelligence</h1>
+            <button id="loadHistoryBtn" class="btn btn-ghost btn-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+              Refresh
+            </button>
+          </div>
+          <div class="project-badge" id="intelProjectBadge">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            <span id="intelProjectLabel">—</span>
+          </div>
+          <p id="projectDescription" class="page-subtitle project-desc-text" style="display:none;"></p>
+        </div>
+
+        <!-- Stats bar -->
+        <div class="stats-grid" id="statsGrid" aria-label="Project statistics">
+          <div class="stat-card">
+            <div class="stat-icon stat-icon-primary" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+            </div>
+            <div>
+              <div class="stat-value" id="statMeetingsCount">—</div>
+              <div class="stat-label">Meetings</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon stat-icon-warning" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+            </div>
+            <div>
+              <div class="stat-value" id="statPendingCount">—</div>
+              <div class="stat-label">Pending Items</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon stat-icon-success" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            </div>
+            <div>
+              <div class="stat-value" id="statCompletedCount">—</div>
+              <div class="stat-label">Completed</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon stat-icon-purple" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <div>
+              <div class="stat-value" id="statLastMeeting">—</div>
+              <div class="stat-label">Last Meeting</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Meetings history + Minutes -->
+        <div class="intel-grid">
+
+          <!-- Meetings list -->
+          <div class="card">
+            <div class="card-header card-header-between">
+              <h2>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+                Meeting History
+              </h2>
+            </div>
+            <div class="filters-row">
+              <div class="search-field">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                <input id="meetingSearchQ" placeholder="Search meetings…" class="form-input form-input-sm filter-search" aria-label="Search meetings" />
+              </div>
+              <input id="meetingFilterFrom" type="date" class="form-input form-input-sm" title="From date" aria-label="Filter from date" />
+              <input id="meetingFilterTo" type="date" class="form-input form-input-sm" title="To date" aria-label="Filter to date" />
+              <div class="select-wrap select-wrap-sm">
+                <select id="meetingFilterStatus" class="form-select form-select-sm" aria-label="Filter by status">
+                  <option value="">All statuses</option>
+                  <option value="processed">Processed</option>
+                  <option value="created">Created</option>
+                  <option value="failed">Failed</option>
+                </select>
+                <svg class="select-caret" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+              </div>
+            </div>
+            <div id="meetingsList" class="meetings-list" role="list"></div>
+            <div id="meetingsEmpty" class="empty-state" style="display:none;" role="status">
+              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><line x1="10" x2="14" y1="16" y2="16"/><line x1="12" x2="12" y1="14" y2="18"/></svg>
+              <p>No meetings yet. Record your first meeting to get started.</p>
+            </div>
+          </div>
+
+          <!-- Meeting minutes -->
+          <div class="card">
+            <div class="card-header card-header-between">
+              <h2>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>
+                Meeting Minutes
+              </h2>
+              <button id="printBtn" class="btn btn-ghost btn-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                Download PDF
+              </button>
+            </div>
+
+            <div id="meetingAudioWrap" style="display:none;" class="audio-wrap">
+              <label class="text-muted text-sm audio-label">Listen to recording</label>
+              <audio id="meetingAudio" controls class="audio-player" aria-label="Meeting audio playback"></audio>
+            </div>
+
+            <div class="notes-section">
+              <label class="form-label" for="meetingNotesInput">Meeting notes</label>
+              <textarea id="meetingNotesInput" class="form-textarea" placeholder="Add personal notes for this meeting…" rows="3" aria-label="Meeting notes"></textarea>
+              <button id="saveMeetingNotesBtn" class="btn btn-primary btn-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                Save notes
+              </button>
+            </div>
+
+            <div id="latestMinutes" class="minutes-content">
+              <div class="empty-state empty-state-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                <p>Select a meeting from the list to view its minutes.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Participants + Speaker labeling -->
+        <div class="intel-grid">
+
+          <!-- Participants -->
+          <div class="card">
+            <div class="card-header card-header-between">
+              <h2>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                Participants
+              </h2>
+              <button id="saveParticipantsBtn" class="btn btn-primary btn-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                Save
+              </button>
+            </div>
+            <p class="text-muted text-sm card-desc">Add participant names to enable manual speaker labelling.</p>
+            <div class="input-group">
+              <input id="participantInput" class="form-input" placeholder="Add name (e.g. Alice, Bob…)" aria-label="Add participant name" />
+              <button id="addParticipantBtn" class="btn btn-ghost">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                Add
+              </button>
+            </div>
+            <div id="participantsList" class="pill-list" role="list" aria-label="Participants list"></div>
+            <div id="participantsStatus" class="status-text" role="status" aria-live="polite"></div>
+          </div>
+
+          <!-- Speaker labeling -->
+          <div class="card">
+            <div class="card-header card-header-between">
+              <h2>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                Speaker Labelling
+              </h2>
+              <div class="btn-group">
+                <button id="generateSegmentsBtn" class="btn btn-ghost btn-sm">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                  Generate
+                </button>
+                <button id="saveSegmentsBtn" class="btn btn-primary btn-sm" disabled>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                  Save
+                </button>
+              </div>
+            </div>
+            <p class="text-muted text-sm card-desc">Split the transcript into segments and assign speaker names manually.</p>
+            <div id="segmentsEditor" class="segments-editor" role="list"></div>
+            <div id="segmentsStatus" class="status-text" role="status" aria-live="polite"></div>
+          </div>
+        </div>
+
+        <!-- Speaker name corrections -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon card-icon-neutral" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            </div>
+            <div class="card-header-text">
+              <h2>Speaker Name Corrections</h2>
+              <p class="text-muted text-sm">Map transcript names to display names (e.g. "spkr_1" → "Alice"). Applied to summaries and action items only — transcript text is unchanged.</p>
+            </div>
+            <button id="saveNameAliasesBtn" class="btn btn-primary btn-sm" style="flex-shrink:0;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              Save
+            </button>
+          </div>
+          <div class="alias-input-row">
+            <input id="nameAliasFromInput" class="form-input" placeholder="Transcript shows (e.g. spkr_1)" aria-label="Original name in transcript" />
+            <span class="alias-arrow" aria-hidden="true">→</span>
+            <input id="nameAliasToInput" class="form-input" placeholder="Display as (e.g. Alice)" aria-label="Corrected display name" />
+            <button id="addNameAliasBtn" class="btn btn-ghost">
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+              Add
+            </button>
+          </div>
+          <div id="nameAliasesList" class="alias-list" role="list"></div>
+          <div id="nameAliasesStatus" class="status-text" role="status" aria-live="polite"></div>
+        </div>
+
+        <!-- Action items: Pending + Completed -->
+        <div class="intel-grid">
+
+          <!-- Pending action items -->
+          <div class="card">
+            <div class="card-header card-header-between">
+              <h2>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Pending Action Items
+              </h2>
+              <div class="btn-group">
+                <label class="checkbox-label text-sm">
+                  <input type="checkbox" id="showCompletedToggle" class="checkbox" />
+                  <span class="checkbox-text">Show completed</span>
+                </label>
+                <button id="bulkCompleteBtn" class="btn btn-primary btn-sm" disabled>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Complete selected
+                </button>
+              </div>
+            </div>
+            <div id="pendingItemsList" class="action-items-list" role="list" aria-label="Pending action items"></div>
+
+            <div class="section-divider"></div>
+
+            <div class="add-action-section">
+              <h3 class="section-subheading">Add action item manually</h3>
+              <div class="form-row">
+                <input id="aiWho" class="form-input" placeholder="Who (optional)" aria-label="Who is responsible" />
+                <input id="aiWillDo" class="form-input" placeholder="Will do (e.g. prepare)" aria-label="Verb/action" />
+              </div>
+              <div class="form-row">
+                <input id="aiWhat" class="form-input flex-grow" placeholder="What (required)" aria-label="What needs to be done" />
+                <input id="aiByWhen" class="form-input" placeholder="By when (YYYY-MM-DD)" aria-label="Due date" />
+                <button id="addAiBtn" class="btn btn-primary">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                  Add
+                </button>
+              </div>
+              <div id="aiStatus" class="status-text" role="status" aria-live="polite"></div>
+            </div>
+          </div>
+
+          <!-- Completed action items -->
+          <div class="card">
+            <div class="card-header">
+              <h2>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                Completed Items
+              </h2>
+            </div>
+            <div id="completedItemsList" class="action-items-list" role="list" aria-label="Completed action items"></div>
+          </div>
+        </div>
+
+        <!-- Activity log -->
+        <div class="card">
+          <div class="card-header card-header-between">
+            <div class="card-header-left">
+              <div class="card-icon card-icon-neutral" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              </div>
+              <div>
+                <h2>Activity Log</h2>
+                <p class="text-muted text-sm">Recent project activity.</p>
+              </div>
+            </div>
+            <button id="loadActivityBtn" class="btn btn-ghost btn-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+              Refresh
+            </button>
+          </div>
+          <div id="activityLogList" class="activity-list" role="list" aria-label="Activity log"></div>
+        </div>
+
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<script>window.__currentUser = {{ user_json | safe }};</script>
+<script src="/static/app.js"></script>
+</body>
+</html>
